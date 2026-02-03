@@ -184,6 +184,23 @@ app.delete('/api/queries/:id', authenticateToken, (req, res) => {
     res.sendStatus(204);
 });
 
+// --- Debug Route (for viewing data on free tier) ---
+app.get('/api/debug/get-all-data-for-mahfuja', (req, res) => {
+    try {
+        const users = readUsers();
+        const queries = readQueries();
+        const sharedQueries = readSharedQueries();
+        res.json({
+            users,
+            queries,
+            sharedQueries
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to read data files.', details: error.message });
+    }
+});
+
+
 // --- Sharing Routes ---
 
 // Create a shareable link for a query
