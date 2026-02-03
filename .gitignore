@@ -1,0 +1,10 @@
+# Dependencies
+/node_modules
+
+# DB files
+/db/users.json
+/db/queries.json
+/db/shared_queries.json
+
+# Environment
+.env
