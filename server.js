@@ -1,23 +1,36 @@
+require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { Pool } = require('pg'); // Import the Pool from 'pg'
+
+// PostgreSQL Connection Pool Configuration
+// These should ideally come from environment variables
+const pool = new Pool({
+    user: process.env.DB_USER || 'postgres',      // Your PostgreSQL username
+    host: process.env.DB_HOST || 'localhost',     // Your PostgreSQL host
+    database: process.env.DB_NAME || 'smart_query_app', // The database you created
+    password: process.env.DB_PASSWORD || 'your_db_password', // Your PostgreSQL password
+    port: process.env.DB_PORT || 5432,            // Default PostgreSQL port
+});
+
+// Test the database connection
+pool.connect()
+    .then(client => {
+        console.log('Connected to PostgreSQL database');
+        client.release(); // Release the client back to the pool
+    })
+    .catch(err => {
+        console.error('Error connecting to PostgreSQL database', err.stack);
+    });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// File paths
-const DB_DIR = path.join(__dirname, 'db');
-const USERS_FILE = path.join(DB_DIR, 'users.json');
-const QUERIES_FILE = path.join(DB_DIR, 'queries.json');
-const SHARED_QUERIES_FILE = path.join(DB_DIR, 'shared_queries.json');
 
-// Ensure db directory exists
-if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR);
-}
 
 // Secret key for JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-that-should-be-in-an-env-file';
@@ -27,33 +40,72 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public')); // Serve static files from 'public' directory
 
-// --- Helper Functions ---
-const readUsers = () => {
-    if (!fs.existsSync(USERS_FILE)) return [];
-    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-};
 
-const writeUsers = (users) => {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-};
 
-const readQueries = () => {
-    if (!fs.existsSync(QUERIES_FILE)) return [];
-    return JSON.parse(fs.readFileSync(QUERIES_FILE, 'utf8'));
-};
+// --- User Data Access (PostgreSQL) ---
+async function findUserByUsername(username) {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    return result.rows[0];
+}
 
-const writeQueries = (queries) => {
-    fs.writeFileSync(QUERIES_FILE, JSON.stringify(queries, null, 2));
-};
+async function findUserById(id) {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    return result.rows[0];
+}
 
-const readSharedQueries = () => {
-    if (!fs.existsSync(SHARED_QUERIES_FILE)) return [];
-    return JSON.parse(fs.readFileSync(SHARED_QUERIES_FILE, 'utf8'));
-};
+async function createUser(username, hashedPassword) {
+    const result = await pool.query(
+        'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
+        [username, hashedPassword]
+    );
+    return result.rows[0];
+}
 
-const writeSharedQueries = (queries) => {
-    fs.writeFileSync(SHARED_QUERIES_FILE, JSON.stringify(queries, null, 2));
-};
+// --- Query Data Access (PostgreSQL) ---
+async function getUserQueries(userId) {
+    const result = await pool.query('SELECT id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt" FROM queries WHERE user_id = $1 ORDER BY updated_at DESC', [userId]);
+    return result.rows;
+}
+
+async function addQuery(userId, title, queryText) {
+    const result = await pool.query(
+        'INSERT INTO queries (user_id, title, query_text) VALUES ($1, $2, $3) RETURNING id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt"',
+        [userId, title, queryText]
+    );
+    return result.rows[0];
+}
+
+async function updateUserQuery(queryId, userId, title, queryText) {
+    const result = await pool.query(
+        'UPDATE queries SET title = $1, query_text = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4 RETURNING id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt"',
+        [title, queryText, queryId, userId]
+    );
+    return result.rows[0];
+}
+
+async function deleteUserQuery(queryId, userId) {
+    const result = await pool.query('DELETE FROM queries WHERE id = $1 AND user_id = $2 RETURNING id', [queryId, userId]);
+    return result.rowCount > 0;
+}
+
+async function getQueryByIdAndUserId(queryId, userId) {
+    const result = await pool.query('SELECT id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt" FROM queries WHERE id = $1 AND user_id = $2', [queryId, userId]);
+    return result.rows[0];
+}
+
+// --- Shared Query Data Access (PostgreSQL) ---
+async function addSharedQuery(shareId, title, queryText, originalUserId) {
+    const result = await pool.query(
+        'INSERT INTO shared_queries (share_id, title, query_text, original_user_id) VALUES ($1, $2, $3, $4) RETURNING share_id AS "shareId", title, query_text AS query, original_user_id AS "originalUserId", created_at AS "createdAt"',
+        [shareId, title, queryText, originalUserId]
+    );
+    return result.rows[0];
+}
+
+async function getSharedQueryById(shareId) {
+    const result = await pool.query('SELECT share_id AS "shareId", title, query_text AS query, original_user_id AS "originalUserId", created_at AS "createdAt" FROM shared_queries WHERE share_id = $1', [shareId]);
+    return result.rows[0];
+}
 
 // --- Auth Middleware ---
 const authenticateToken = (req, res, next) => {
@@ -77,24 +129,25 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).send('Username and password are required.');
     }
 
-    const users = readUsers();
-    if (users.find(u => u.username === username)) {
+    const existingUser = await findUserByUsername(username);
+    if (existingUser) {
         return res.status(409).send('Username already exists.');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = { id: Date.now(), username, password: hashedPassword };
-    users.push(newUser);
-    writeUsers(users);
-
-    res.status(201).send('User registered successfully.');
+    try {
+        await createUser(username, hashedPassword);
+        res.status(201).send('User registered successfully.');
+    } catch (error) {
+        console.error('Error registering user:', error);
+        res.status(500).send('Internal server error.');
+    }
 });
 
 // Login a user
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    const users = readUsers();
-    const user = users.find(u => u.username === username);
+    const user = await findUserByUsername(username);
 
     if (user == null) {
         return res.status(400).send('Cannot find user.');
@@ -107,41 +160,42 @@ app.post('/api/login', async (req, res) => {
         } else {
             res.status(403).send('Not Allowed. Incorrect password.');
         }
-    } catch {
-        res.status(500).send();
+    } catch (error) {
+        console.error('Error during login:', error);
+        res.status(500).send('Internal server error.');
     }
 });
 
 // Get user's queries
-app.get('/api/queries', authenticateToken, (req, res) => {
-    const allQueries = readQueries();
-    const userQueries = allQueries.filter(q => q.userId === req.user.id);
-    res.json(userQueries);
+app.get('/api/queries', authenticateToken, async (req, res) => {
+    try {
+        const userQueries = await getUserQueries(req.user.id);
+        res.json(userQueries);
+    } catch (error) {
+        console.error('Error fetching user queries:', error);
+        res.status(500).send('Internal server error.');
+    }
 });
 
 // Add a new query for a user
-app.post('/api/queries', authenticateToken, (req, res) => {
+app.post('/api/queries', authenticateToken, async (req, res) => {
     const { title, query } = req.body;
     if (!title || !query) {
         return res.status(400).send('Title and query are required.');
     }
 
-    const allQueries = readQueries();
-    const newQuery = {
-        id: Date.now(),
-        userId: req.user.id,
-        title,
-        query
-    };
-    allQueries.push(newQuery);
-    writeQueries(allQueries);
-    res.status(201).json(newQuery);
+    try {
+        const newQuery = await addQuery(req.user.id, title, query);
+        res.status(201).json(newQuery);
+    } catch (error) {
+        console.error('Error adding new query:', error);
+        res.status(500).send('Internal server error.');
+    }
 });
 
 // Update a user's query (using POST as a workaround)
-app.post('/api/queries/update/:id', authenticateToken, (req, res) => {
+app.post('/api/queries/update/:id', authenticateToken, async (req, res) => {
     console.log('POST /api/queries/update/:id request received');
-    const allQueries = readQueries();
     const queryId = parseInt(req.params.id);
     const { title, query } = req.body;
 
@@ -149,54 +203,50 @@ app.post('/api/queries/update/:id', authenticateToken, (req, res) => {
         return res.status(400).send('Title and query are required.');
     }
 
-    const queryIndex = allQueries.findIndex(q => q.id === queryId && q.userId === req.user.id);
-
-    if (queryIndex === -1) {
-        return res.status(404).send('Query not found or you do not have permission to edit it.');
+    try {
+        const updatedQuery = await updateUserQuery(queryId, req.user.id, title, query);
+        if (!updatedQuery) {
+            return res.status(404).send('Query not found or you do not have permission to edit it.');
+        }
+        res.json(updatedQuery);
+    } catch (error) {
+        console.error('Error updating query:', error);
+        res.status(500).send('Internal server error.');
     }
-
-    const updatedQuery = {
-        ...allQueries[queryIndex],
-        title,
-        query,
-        updatedAt: new Date().toISOString()
-    };
-    allQueries[queryIndex] = updatedQuery;
-
-    writeQueries(allQueries);
-    res.json(updatedQuery);
 });
 
 // Delete a user's query
-app.delete('/api/queries/:id', authenticateToken, (req, res) => {
+app.delete('/api/queries/:id', authenticateToken, async (req, res) => {
     console.log('DELETE /api/queries/:id request received');
-    const allQueries = readQueries();
     const queryId = parseInt(req.params.id);
-    
-    // Ensure the query exists and belongs to the user
-    const queryToDelete = allQueries.find(q => q.id === queryId && q.userId === req.user.id);
-    if (!queryToDelete) {
-        return res.status(404).send('Query not found or you do not have permission to delete it.');
-    }
 
-    const updatedQueries = allQueries.filter(q => q.id !== queryId);
-    writeQueries(updatedQueries);
-    res.sendStatus(204);
+    try {
+        const deleted = await deleteUserQuery(queryId, req.user.id);
+        if (!deleted) {
+            return res.status(404).send('Query not found or you do not have permission to delete it.');
+        }
+        res.sendStatus(204);
+    } catch (error) {
+        console.error('Error deleting query:', error);
+        res.status(500).send('Internal server error.');
+    }
 });
 
 // --- Debug Route (for viewing data on free tier) ---
-app.get('/api/debug/get-all-data-for-mahfuja', (req, res) => {
+app.get('/api/debug/get-all-data-for-mahfuja', async (req, res) => {
     try {
-        const users = readUsers();
-        const queries = readQueries();
-        const sharedQueries = readSharedQueries();
+        const usersResult = await pool.query('SELECT id, username FROM users');
+        const queriesResult = await pool.query('SELECT id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt" FROM queries');
+        const sharedQueriesResult = await pool.query('SELECT share_id AS "shareId", title, query_text AS query, original_user_id AS "originalUserId", created_at AS "createdAt" FROM shared_queries');
+        
         res.json({
-            users,
-            queries,
-            sharedQueries
+            users: usersResult.rows,
+            queries: queriesResult.rows,
+            sharedQueries: sharedQueriesResult.rows
         });
     } catch (error) {
-        res.status(500).json({ error: 'Failed to read data files.', details: error.message });
+        console.error('Error fetching debug data from PostgreSQL:', error);
+        res.status(500).json({ error: 'Failed to read data from PostgreSQL.', details: error.message });
     }
 });
 
@@ -204,58 +254,61 @@ app.get('/api/debug/get-all-data-for-mahfuja', (req, res) => {
 // --- Sharing Routes ---
 
 // Create a shareable link for a query
-app.post('/api/queries/share/:id', authenticateToken, (req, res) => {
-    const allQueries = readQueries();
+app.post('/api/queries/share/:id', authenticateToken, async (req, res) => {
     const queryId = parseInt(req.params.id);
 
-    const queryToShare = allQueries.find(q => q.id === queryId && q.userId === req.user.id);
-    if (!queryToShare) {
-        return res.status(404).send('Query not found or you do not have permission to share it.');
+    try {
+        const queryToShare = await getQueryByIdAndUserId(queryId, req.user.id);
+        if (!queryToShare) {
+            return res.status(404).send('Query not found or you do not have permission to share it.');
+        }
+
+        const shareId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const newSharedQuery = await addSharedQuery(
+            shareId,
+            queryToShare.title,
+            queryToShare.query,
+            req.user.id
+        );
+
+        const shareLink = `${req.protocol}://${req.get('host')}/share/${newSharedQuery.shareId}`;
+        res.json({ shareLink });
+    } catch (error) {
+        console.error('Error sharing query:', error);
+        res.status(500).send('Internal server error.');
     }
-
-    const sharedQueries = readSharedQueries();
-    const shareId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    const newSharedQuery = {
-        shareId,
-        title: queryToShare.title,
-        query: queryToShare.query,
-        originalUserId: req.user.id,
-        createdAt: new Date().toISOString()
-    };
-
-    sharedQueries.push(newSharedQuery);
-    writeSharedQueries(sharedQueries);
-
-    const shareLink = `${req.protocol}://${req.get('host')}/share/${shareId}`;
-    res.json({ shareLink });
 });
 
 // Get a shared query by its public shareId (API)
-app.get('/api/share/:shareId', (req, res) => {
-    const sharedQueries = readSharedQueries();
+app.get('/api/share/:shareId', async (req, res) => {
     const { shareId } = req.params;
-    const query = sharedQueries.find(q => q.shareId === shareId);
+    try {
+        const query = await getSharedQueryById(shareId);
 
-    if (!query) {
-        return res.status(404).send('Shared query not found.');
+        if (!query) {
+            return res.status(404).send('Shared query not found.');
+        }
+        res.json(query);
+    } catch (error) {
+        console.error('Error fetching shared query (API):', error);
+        res.status(500).send('Internal server error.');
     }
-    res.json(query);
 });
 
 // --- Public Page for Shared Queries ---
 
 // Serve a simple HTML page for a shared query
-app.get('/share/:shareId', (req, res) => {
-    const sharedQueries = readSharedQueries();
+app.get('/share/:shareId', async (req, res) => {
     const { shareId } = req.params;
-    const query = sharedQueries.find(q => q.shareId === shareId);
+    try {
+        const query = await getSharedQueryById(shareId);
 
-    if (!query) {
-        return res.status(404).send('<h1>Not Found</h1><p>The query you are looking for does not exist or has been removed.</p>');
-    }
+        if (!query) {
+            return res.status(404).send('<h1>Not Found</h1><p>The query you are looking for does not exist or has been removed.</p>');
+        }
 
-    res.send(`
+        res.send(`
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -294,6 +347,10 @@ app.get('/share/:shareId', (req, res) => {
         </body>
         </html>
     `);
+    } catch (error) {
+        console.error('Error serving shared query page:', error);
+        res.status(500).send('<h1>Error</h1><p>An error occurred while loading the shared query.</p>');
+    }
 });
 
 
@@ -301,8 +358,5 @@ app.get('/share/:shareId', (req, res) => {
 // --- Start Server ---
 app.listen(PORT, () => {
     console.log(`Smart Query Server v2 is active on http://localhost:${PORT}`);
-    // Initialize db files if they don't exist
-    if (!fs.existsSync(USERS_FILE)) writeUsers([]);
-    if (!fs.existsSync(QUERIES_FILE)) writeQueries([]);
-    if (!fs.existsSync(SHARED_QUERIES_FILE)) writeSharedQueries([]);
+
 });
