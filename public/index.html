@@ -138,11 +138,11 @@
         }
 
         // --- Main App Components ---
-        function TitleBar({ onLogout }) {
+        function TitleBar({ onLogout, onShowHistory }) {
             return (
                 <nav className="navbar navbar-dark bg-dark fixed-top">
                     <div className="container-fluid d-flex justify-content-between align-items-center">
-                        <div style={{width: '60px'}}></div>
+                        <button onClick={onShowHistory} className="btn btn-outline-info me-2">History</button>
                         <span className="navbar-brand mb-0 h1 mx-auto text-info"><i className="bi bi-search"></i> Smart Query App</span>
                         <button onClick={onLogout} className="btn btn-outline-light">Logout</button>
                     </div>
@@ -361,11 +361,55 @@
                 </div>
             );
         }
+
+        // --- Query History Component ---
+        function QueryHistory({ token, getAuthHeader, onBack }) {
+            const [history, setHistory] = useState([]);
+            const [error, setError] = useState("");
+
+            useEffect(() => {
+                const fetchHistory = async () => {
+                    try {
+                        const response = await fetch(`${API_URL}/history`, { headers: getAuthHeader() });
+                        if (!response.ok) throw new Error('Could not fetch query history.');
+                        const data = await response.json();
+                        setHistory(data);
+                    } catch (err) {
+                        setError(err.message);
+                    }
+                };
+                fetchHistory();
+            }, [token]);
+
+            return (
+                <div>
+                    <button onClick={onBack} className="btn btn-secondary mb-3"><i className="bi bi-arrow-left"></i> Back to My Queries</button>
+                    <h4 className="mb-3 text-secondary">Query History</h4>
+                    {error && <div className="alert alert-danger">{error}</div>}
+                    {history.length === 0 ? (
+                        <p className="text-center">No query history found.</p>
+                    ) : (
+                        <div className="list-group">
+                            {history.map(entry => (
+                                <div key={entry.id} className="list-group-item list-group-item-action flex-column align-items-start mb-2">
+                                    <div className="d-flex w-100 justify-content-between">
+                                        <h5 className="mb-1 text-info">{entry.title || 'Untitled Query'}</h5>
+                                        <small>{new Date(entry.createdAt).toLocaleString()}</small>
+                                    </div>
+                                    <p className="mb-1 query-history-text">{entry.query}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
         
         function MainApp({ token, onLogout }) {
             const [queries, setQueries] = useState([]);
             const [searchTerm, setSearchTerm] = useState("");
             const [error, setError] = useState("");
+            const [showHistory, setShowHistory] = useState(false); // State to toggle between main queries and history
 
             const getAuthHeader = () => ({
                 'Authorization': `Bearer ${token}`,
@@ -373,18 +417,23 @@
             });
 
             useEffect(() => {
-                const fetchQueries = async () => {
-                    try {
-                        const response = await fetch(`${API_URL}/queries`, { headers: getAuthHeader() });
-                        if (!response.ok) throw new Error('Could not fetch queries.');
-                        const data = await response.json();
-                        setQueries(data);
-                    } catch (err) {
-                        setError(err.message);
-                    }
-                };
-                fetchQueries();
-            }, [token]);
+                // Fetch queries only if not showing history
+                if (!showHistory) {
+                    const fetchQueries = async () => {
+                        try {
+                            const response = await fetch(`${API_URL}/queries`, { headers: getAuthHeader() });
+                            if (!response.ok) throw new Error('Could not fetch queries.');
+                            const data = await response.json();
+                            setQueries(data);
+                        } catch (err) {
+                            setError(err.message);
+                        }
+                    };
+                    fetchQueries();
+                } else {
+                    setQueries([]); // Clear queries if history is shown to avoid displaying both
+                }
+            }, [token, showHistory]); // Re-fetch when token or showHistory changes
 
             const handleAddQuery = async (newQuery) => {
                 try {
@@ -437,6 +486,14 @@
                     alert(`Failed to update query: ${err.message}`);
                 }
             };
+
+            const handleShowHistory = () => {
+                setShowHistory(true);
+            };
+
+            const handleHideHistory = () => {
+                setShowHistory(false);
+            };
             
             const lowercasedSearchTerm = searchTerm.toLowerCase().trim();
             const showAllKeywords = ['all', 'all queries'];
@@ -447,18 +504,24 @@
 
             return (
                 <div className="main-app-container">
-                    <TitleBar onLogout={onLogout} />
+                    <TitleBar onLogout={onLogout} onShowHistory={handleShowHistory} />
                     <div className="container">
                         {error && <div className="alert alert-danger">{error}</div>}
-                        <AddQueryForm onAddQuery={handleAddQuery} />
-                        <hr />
-                        <SearchBar onSearch={setSearchTerm} />
-                        <QueryList
-                            queries={filteredQueries}
-                            onDeleteQuery={handleDeleteQuery}
-                            onUpdateQuery={handleUpdateQuery}
-                            getAuthHeader={getAuthHeader}
-                        />
+                        {showHistory ? (
+                            <QueryHistory token={token} getAuthHeader={getAuthHeader} onBack={handleHideHistory} />
+                        ) : (
+                            <>
+                                <AddQueryForm onAddQuery={handleAddQuery} />
+                                <hr />
+                                <SearchBar onSearch={setSearchTerm} />
+                                <QueryList
+                                    queries={filteredQueries}
+                                    onDeleteQuery={handleDeleteQuery}
+                                    onUpdateQuery={handleUpdateQuery}
+                                    getAuthHeader={getAuthHeader}
+                                />
+                            </>
+                        )}
                     </div>
                 </div>
             );

@@ -93,6 +93,33 @@ async function getQueryByIdAndUserId(queryId, userId) {
     return result.rows[0];
 }
 
+// --- Query History Data Access (PostgreSQL) ---
+async function addQueryToHistory(userId, title, queryText) {
+    try {
+        const result = await pool.query(
+            'INSERT INTO query_history (user_id, title, query_text) VALUES ($1, $2, $3) RETURNING id, user_id AS "userId", title, query_text AS query, created_at AS "createdAt"',
+            [userId, title, queryText]
+        );
+        return result.rows[0];
+    } catch (error) {
+        console.error('Error adding query to history:', error);
+        throw error;
+    }
+}
+
+async function getHistoryForUser(userId) {
+    try {
+        const result = await pool.query(
+            'SELECT id, user_id AS "userId", title, query_text AS query, created_at AS "createdAt" FROM query_history WHERE user_id = $1 ORDER BY created_at DESC',
+            [userId]
+        );
+        return result.rows;
+    } catch (error) {
+        console.error('Error fetching query history:', error);
+        throw error;
+    }
+}
+
 // --- Shared Query Data Access (PostgreSQL) ---
 async function addSharedQuery(shareId, title, queryText, originalUserId) {
     const result = await pool.query(
@@ -186,6 +213,8 @@ app.post('/api/queries', authenticateToken, async (req, res) => {
 
     try {
         const newQuery = await addQuery(req.user.id, title, query);
+        // Log to history
+        await addQueryToHistory(req.user.id, title, query);
         res.status(201).json(newQuery);
     } catch (error) {
         console.error('Error adding new query:', error);
@@ -208,6 +237,8 @@ app.post('/api/queries/update/:id', authenticateToken, async (req, res) => {
         if (!updatedQuery) {
             return res.status(404).send('Query not found or you do not have permission to edit it.');
         }
+        // Log to history
+        await addQueryToHistory(req.user.id, title, query);
         res.json(updatedQuery);
     } catch (error) {
         console.error('Error updating query:', error);
@@ -231,6 +262,32 @@ app.delete('/api/queries/:id', authenticateToken, async (req, res) => {
         res.status(500).send('Internal server error.');
     }
 });
+
+// --- Query History API ---
+app.post('/api/history', authenticateToken, async (req, res) => {
+    const { title, query } = req.body;
+    if (!title || !query) {
+        return res.status(400).send('Title and query are required for history logging.');
+    }
+    try {
+        const historyEntry = await addQueryToHistory(req.user.id, title, query);
+        res.status(201).json(historyEntry);
+    } catch (error) {
+        console.error('Error logging query to history:', error);
+        res.status(500).send('Internal server error.');
+    }
+});
+
+app.get('/api/history', authenticateToken, async (req, res) => {
+    try {
+        const history = await getHistoryForUser(req.user.id);
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching query history:', error);
+        res.status(500).send('Internal server error.');
+    }
+});
+
 
 // --- Debug Route (for viewing data on free tier) ---
 app.get('/api/debug/get-all-data-for-mahfuja', async (req, res) => {

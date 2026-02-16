@@ -99,6 +99,14 @@ To run this application on your local machine for development purposes.
                 original_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE query_history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(255),
+                query_text TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
             ```
 
 4.  **Run the Server:**
