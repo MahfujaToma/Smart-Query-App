@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a **Smart Query App** designed to allow users to save, search, and manage their SQL-like queries. It is a full-stack application with individual user authentication, private query storage, and public sharing capabilities.
+This is a **Smart Query App** designed to allow users to save, search, and manage their SQL-like queries. It is a full-stack application with individual user authentication, private query storage, public sharing capabilities, and now leverages **PostgreSQL for robust data persistence**.
 
 ## Deployment
 
@@ -15,22 +15,24 @@ The server is configured to run in a production environment, and any changes pus
 ## Features Implemented
 
 ### Frontend
-*   **User Authentication UI:** Login and Registration pages.
-*   **Query Management UI:** Add, view, search, edit, and delete queries.
-*   **Responsive Design:** Styled using Bootstrap.
-*   **Inline Editing:** Edit query titles and content directly in the UI.
+*   **User Authentication UI:** Dedicated Login and Registration pages, providing clear feedback for user interactions.
+*   **Query Management UI:** Comprehensive interface to add new queries, view existing ones, search by title, and manage individual queries (edit, delete).
+*   **Responsive Design:** Styled using Bootstrap for a consistent and adaptive user experience across various devices.
+*   **Inline Editing:** Directly edit query titles and content within the UI, with a visible "Save Changes" button appearing when modifications are detected.
+*   **Query Sharing:** Integrated sharing functionality that generates a unique public link for any saved query, making it easy to share with others.
+*   **React-based SPA:** Built as a Single Page Application using React (via CDN) for a dynamic and interactive user experience.
 
 ### Backend
 *   **User Registration & Login:** Secure user accounts with `bcrypt` password hashing and `jsonwebtoken` (JWT) for session management.
 *   **Authenticated API Endpoints:** Ensures users can only access their own private queries.
 *   **Share by Link:** Generate a unique, public URL for a query that can be shared with anyone.
-*   **Data Persistence (Local):** User accounts and queries are stored in local JSON files.
+*   **Data Persistence (PostgreSQL):** Robust data storage for user accounts, queries, and shared query links, ensuring persistence and scalability.
 
 ### Recent Enhancements
 *   **Share by Link:** A share icon (`<i class="bi bi-share"></i>`) now generates a permanent, public link to a query and copies it to the clipboard. Anyone with the link can view the shared query, even without logging in.
 *   **Deployment to Render:** The entire application has been deployed to a public server, making it accessible to everyone on the internet.
-*   **Dynamic Configuration:** The server is now configured to work with environment variables for port and `JWT_SECRET`, allowing it to run in any hosting environment.
-*   **Debug Endpoint:** A secret endpoint at `/api/debug/get-all-data-for-mahfuja` has been added to view the live database files for free on Render's hosting tier.
+*   **Dynamic Configuration:** The server is now configured to work with environment variables for port and `JWT_SECRET`, and crucially, **PostgreSQL connection details**, allowing it to run in any hosting environment.
+*   **Debug Endpoint:** A secret endpoint at `/api/debug/get-all-data-for-mahfuja` has been added. This endpoint allows for viewing **all data directly from the PostgreSQL database** (users, queries, shared queries) and is primarily for debugging purposes, especially on free hosting tiers where direct database access might be limited.
 
 ## Technical Stack
 
@@ -41,9 +43,14 @@ The server is configured to run in a production environment, and any changes pus
 
 ## Data Storage
 
-The application currently uses JSON files (`db/users.json`, `db/queries.json`, `db/shared_queries.json`) for data storage.
+The application now primarily uses **PostgreSQL** for persistent data storage.
 
-**_Warning:_** When running on a hosting service like Render, the filesystem is **ephemeral**. This means any new data added (new users, new queries) **will be deleted** when the server restarts or redeploys. For a production-ready application, this should be migrated to a persistent database service like PostgreSQL.
+*   **Users:** Stored in the `users` table.
+*   **Queries:** Stored in the `queries` table, linked to users.
+*   **Shared Queries:** Stored in the `shared_queries` table, containing public links to queries.
+
+**Important Note on Local Development and Deployment:**
+For local development, you will need a running PostgreSQL instance. When deployed on services like Render, it is crucial to connect to a managed PostgreSQL database service to ensure data persistence across restarts and redeployments. While the debug endpoint can access current data, it does not guarantee persistence on ephemeral filesystems without a proper database setup.
 
 ## Local Development Setup
 
@@ -52,6 +59,7 @@ To run this application on your local machine for development purposes.
 ### Prerequisites
 1.  **Node.js and npm:** Install from [nodejs.org](https://nodejs.org/en/download).
 2.  **Git:** Install from [git-scm.com](https://git-scm.com/downloads).
+3.  **PostgreSQL:** Ensure you have a PostgreSQL server running and accessible. You'll need credentials (username, password, host, port, database name) for local connection.
 
 ### Instructions
 1.  **Clone the Repository:**
@@ -63,14 +71,44 @@ To run this application on your local machine for development purposes.
     ```bash
     npm install
     ```
-3.  **Run the Server:**
+3.  **Database Setup (PostgreSQL):**
+    *   Create a PostgreSQL database (e.g., `smart_query_app`).
+    *   Ensure your `server.js` or environment variables (`.env`) are configured with the correct PostgreSQL connection details (DB_USER, DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT).
+    *   You will need to create the necessary tables for `users`, `queries`, and `shared_queries`. A simple way to do this is by running SQL commands. (Note: The current project does not include migration scripts, so you'll need to manually create these tables or run a setup script if provided separately).
+        *   **Example SQL for table creation (adjust as needed):**
+            ```sql
+            CREATE TABLE users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE queries (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                query_text TEXT NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE shared_queries (
+                share_id VARCHAR(255) PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                query_text TEXT NOT NULL,
+                original_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            ```
+
+4.  **Run the Server:**
     ```bash
     node server.js
     ```
     The server will start on `http://localhost:3000`.
 
-4.  **Open the Frontend:**
-    Navigate to the `public` directory and open `index.html` in your browser. You can now use the application locally. It will connect to your local server.
+5.  **Open the Frontend:**
+    Navigate to the `public` directory and open `index.html` in your browser. This will load the client-side application, which will then connect to your locally running Node.js server.
 
 ## Key Files
 
@@ -78,4 +116,4 @@ To run this application on your local machine for development purposes.
 *   `server.js`: The Node.js/Express backend server code.
 *   `public/index.html`: The entire React frontend application.
 *   `.gitignore`: Specifies files for Git to ignore.
-*   `db/*.json`: Database files (used for local development).
+*   `db/*.json`: These files were previously used for local data storage but the application now primarily uses PostgreSQL. They may remain as examples or historical context.
