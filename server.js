@@ -250,13 +250,28 @@ app.post('/api/queries/update/:id', authenticateToken, async (req, res) => {
 app.delete('/api/queries/:id', authenticateToken, async (req, res) => {
     console.log('DELETE /api/queries/:id request received');
     const queryId = parseInt(req.params.id);
+    const userId = req.user.id;
 
     try {
-        const deleted = await deleteUserQuery(queryId, req.user.id);
-        if (!deleted) {
+        // Find the query to be deleted to log it to history
+        const queryToDelete = await getQueryByIdAndUserId(queryId, userId);
+
+        if (!queryToDelete) {
             return res.status(404).send('Query not found or you do not have permission to delete it.');
         }
-        res.sendStatus(204);
+
+        // Add the query to the history table before deleting
+        await addQueryToHistory(userId, queryToDelete.title, queryToDelete.query);
+
+        // Now, delete the query from the main queries table
+        const deleted = await deleteUserQuery(queryId, userId);
+
+        if (!deleted) {
+            // This case should not be reached if the find query worked, but for safety
+            return res.status(4_04).send('Query not found during deletion.');
+        }
+
+        res.sendStatus(204); // Success
     } catch (error) {
         console.error('Error deleting query:', error);
         res.status(500).send('Internal server error.');
