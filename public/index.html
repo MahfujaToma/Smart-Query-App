@@ -498,6 +498,35 @@
                 }
             }, [token, showHistory]); // Re-fetch when token or showHistory changes
 
+            const addQueryToHistoryAPI = async (queryData) => {
+                try {
+                    const response = await fetch(`${API_URL}/history`, {
+                        method: 'POST',
+                        headers: getAuthHeader(),
+                        body: JSON.stringify({ title: queryData.title, query: queryData.query }),
+                    });
+                    if (!response.ok) {
+                        console.error('Failed to add search result to history.');
+                    }
+                } catch (err) {
+                    console.error('Error adding to history:', err);
+                }
+            };
+
+            const handleSearch = (term) => {
+                setSearchTerm(term);
+
+                const lowercasedTerm = term.toLowerCase().trim();
+                const showAllKeywords = ['all', 'all queries'];
+
+                if (lowercasedTerm && !showAllKeywords.includes(lowercasedTerm)) {
+                    const results = queries.filter(q => q.title.toLowerCase() === lowercasedTerm);
+                    results.forEach(q => {
+                        addQueryToHistoryAPI(q);
+                    });
+                }
+            };
+
             const handleAddQuery = async (newQuery) => {
                 try {
                     const response = await fetch(`${API_URL}/queries`, {
@@ -576,7 +605,7 @@
                             <>
                                 <AddQueryForm onAddQuery={handleAddQuery} />
                                 <hr />
-                                <SearchBar onSearch={setSearchTerm} />
+                                <SearchBar onSearch={handleSearch} />
                                 <QueryList
                                     queries={filteredQueries}
                                     onDeleteQuery={handleDeleteQuery}
