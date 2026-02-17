@@ -130,6 +130,16 @@ async function deleteQueryHistoryEntry(historyId, userId) {
     }
 }
 
+async function deleteAllUserHistory(userId) {
+    try {
+        await pool.query('DELETE FROM query_history WHERE user_id = $1', [userId]);
+        return true;
+    } catch (error) {
+        console.error('Error deleting all user history:', error);
+        throw error;
+    }
+}
+
 // --- Shared Query Data Access (PostgreSQL) ---
 async function addSharedQuery(shareId, title, queryText, originalUserId) {
     const result = await pool.query(
@@ -309,6 +319,20 @@ app.get('/api/history', authenticateToken, async (req, res) => {
         res.json(history);
     } catch (error) {
         console.error('Error fetching query history:', error);
+        res.status(500).send('Internal server error.');
+    }
+});
+
+// Delete all query history for a user
+app.delete('/api/history/all', authenticateToken, async (req, res) => {
+    console.log('DELETE /api/history/all request received');
+    const userId = req.user.id;
+
+    try {
+        await deleteAllUserHistory(userId);
+        res.sendStatus(204); // Success, no content
+    } catch (error) {
+        console.error('Error deleting all user history:', error);
         res.status(500).send('Internal server error.');
     }
 });

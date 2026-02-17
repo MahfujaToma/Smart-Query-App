@@ -395,7 +395,6 @@
                     if (!response.ok) {
                         throw new Error('Failed to delete history entry.');
                     }
-                    // Update the state to remove the deleted entry
                     setHistory(history.filter(entry => entry.id !== historyId));
                 } catch (err) {
                     setError(err.message);
@@ -403,10 +402,40 @@
                 }
             };
 
+            const handleDeleteAllHistory = async () => {
+                if (!window.confirm('Are you sure you want to delete your entire query history? This action cannot be undone.')) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_URL}/history/all`, {
+                        method: 'DELETE',
+                        headers: getAuthHeader(),
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to delete all history entries.');
+                    }
+                    setHistory([]);
+                } catch (err) {
+                    setError(err.message);
+                    alert(`Error clearing history: ${err.message}`);
+                }
+            };
+
             return (
                 <div>
                     <button onClick={onBack} className="btn btn-secondary mb-3"><i className="bi bi-arrow-left"></i> Back to My Queries</button>
-                    <h4 className="mb-3 text-secondary">Query History</h4>
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                        <h4 className="mb-0 text-secondary">Query History</h4>
+                        {history.length > 0 && (
+                            <button
+                                onClick={handleDeleteAllHistory}
+                                className="btn btn-danger"
+                                title="Delete All History"
+                            >
+                                <i className="bi bi-trash"></i> Delete All
+                            </button>
+                        )}
+                    </div>
                     {error && <div className="alert alert-danger">{error}</div>}
                     {history.length === 0 ? (
                         <p className="text-center">No query history found.</p>
