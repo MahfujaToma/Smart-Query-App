@@ -21,12 +21,14 @@ The server is configured to run in a production environment, and any changes pus
 *   **Inline Editing:** Directly edit query titles and content within the UI, with a visible "Save Changes" button appearing when modifications are detected.
 *   **Query Sharing:** Integrated sharing functionality that generates a unique public link for any saved query, making it easy to share with others.
 *   **React-based SPA:** Built as a Single Page Application using React (via CDN) for a dynamic and interactive user experience.
+*   **Query History:** A dedicated "History" button in the title bar to view a chronological list of recently executed or updated queries, including their titles, content, and the exact time they were added/modified. Users can easily navigate back to their main queries.
 
 ### Backend
 *   **User Registration & Login:** Secure user accounts with `bcrypt` password hashing and `jsonwebtoken` (JWT) for session management.
 *   **Authenticated API Endpoints:** Ensures users can only access their own private queries.
 *   **Share by Link:** Generate a unique, public URL for a query that can be shared with anyone.
 *   **Data Persistence (PostgreSQL):** Robust data storage for user accounts, queries, and shared query links, ensuring persistence and scalability.
+*   **Query History Logging (PostgreSQL):** Automatically logs all newly added or updated queries to a dedicated `query_history` table, storing the query's title, content, and a timestamp for historical tracking.
 
 ### Recent Enhancements
 *   **Share by Link:** A share icon (`<i class="bi bi-share"></i>`) now generates a permanent, public link to a query and copies it to the clipboard. Anyone with the link can view the shared query, even without logging in.

@@ -1,0 +1,5 @@
+
+$env:PGPASSWORD="VGsyEHbfIuKQH30z8TMP99ASw9W8kt3S"
+
+psql -h dpg-d643sgh4tr6s73a8dan0-a.singapore-postgres.render.com -p 5432 -U smart_query_db_user -d smart_query_db
+
