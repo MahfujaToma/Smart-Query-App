@@ -383,6 +383,26 @@
                 fetchHistory();
             }, [token]);
 
+            const handleDeleteHistoryEntry = async (historyId) => {
+                if (!window.confirm('Are you sure you want to delete this history entry?')) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_URL}/history/${historyId}`, {
+                        method: 'DELETE',
+                        headers: getAuthHeader(),
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to delete history entry.');
+                    }
+                    // Update the state to remove the deleted entry
+                    setHistory(history.filter(entry => entry.id !== historyId));
+                } catch (err) {
+                    setError(err.message);
+                    alert(`Error deleting history entry: ${err.message}`);
+                }
+            };
+
             return (
                 <div>
                     <button onClick={onBack} className="btn btn-secondary mb-3"><i className="bi bi-arrow-left"></i> Back to My Queries</button>
@@ -399,6 +419,13 @@
                                         <small>{new Date(entry.createdAt).toLocaleString()}</small>
                                     </div>
                                     <p className="mb-1 query-history-text">{entry.query}</p>
+                                    <button
+                                        onClick={() => handleDeleteHistoryEntry(entry.id)}
+                                        className="btn btn-sm btn-outline-danger mt-2"
+                                        title="Delete History Entry"
+                                    >
+                                        <i className="bi bi-trash"></i> Delete
+                                    </button>
                                 </div>
                             ))}
                         </div>

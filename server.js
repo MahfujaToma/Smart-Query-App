@@ -120,6 +120,16 @@ async function getHistoryForUser(userId) {
     }
 }
 
+async function deleteQueryHistoryEntry(historyId, userId) {
+    try {
+        const result = await pool.query('DELETE FROM query_history WHERE id = $1 AND user_id = $2 RETURNING id', [historyId, userId]);
+        return result.rowCount > 0;
+    } catch (error) {
+        console.error('Error deleting query history entry:', error);
+        throw error;
+    }
+}
+
 // --- Shared Query Data Access (PostgreSQL) ---
 async function addSharedQuery(shareId, title, queryText, originalUserId) {
     const result = await pool.query(
@@ -299,6 +309,24 @@ app.get('/api/history', authenticateToken, async (req, res) => {
         res.json(history);
     } catch (error) {
         console.error('Error fetching query history:', error);
+        res.status(500).send('Internal server error.');
+    }
+});
+
+// Delete a query history entry
+app.delete('/api/history/:id', authenticateToken, async (req, res) => {
+    console.log('DELETE /api/history/:id request received');
+    const historyId = parseInt(req.params.id);
+    const userId = req.user.id;
+
+    try {
+        const deleted = await deleteQueryHistoryEntry(historyId, userId);
+        if (!deleted) {
+            return res.status(404).send('History entry not found or you do not have permission to delete it.');
+        }
+        res.sendStatus(204); // No content to send back, successful deletion
+    } catch (error) {
+        console.error('Error deleting query history entry:', error);
         res.status(500).send('Internal server error.');
     }
 });
