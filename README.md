@@ -15,22 +15,29 @@ The server is configured to run in a production environment, and any changes pus
 ## Features Implemented
 
 ### Frontend
-*   **User Authentication UI:** Dedicated Login and Registration pages, providing clear feedback for user interactions.
-*   **Query Management UI:** Comprehensive interface to add new queries, view existing ones, search by title, and manage individual queries (edit, delete).
+*   **User Authentication UI:** Dedicated Login and Registration pages, providing clear feedback for user interactions, now with **autofill prevention** for username and password fields.
+*   **Query Management UI:** Comprehensive interface to add new queries, view existing ones, search by title, and manage individual queries (edit, delete), now displaying **last updated timestamp** on each query card.
 *   **Responsive Design:** Styled using Bootstrap for a consistent and adaptive user experience across various devices.
 *   **Inline Editing:** Directly edit query titles and content within the UI, with a visible "Save Changes" button appearing when modifications are detected.
 *   **Query Sharing:** Integrated sharing functionality that generates a unique public link for any saved query, making it easy to share with others.
 *   **React-based SPA:** Built as a Single Page Application using React (via CDN) for a dynamic and interactive user experience.
-*   **Query History:** A dedicated "History" button in the title bar to view a chronological list of recently executed or updated queries, including their titles, content, and the exact time they were added/modified. Users can easily navigate back to their main queries.
+*   **Query History:** A dedicated "History" button in the title bar to view a chronological list of recently executed or updated queries. Now includes **individual delete options for history entries** and a **"Delete All History" button**. **Search results are also automatically saved to history**.
 
 ### Backend
 *   **User Registration & Login:** Secure user accounts with `bcrypt` password hashing and `jsonwebtoken` (JWT) for session management.
 *   **Authenticated API Endpoints:** Ensures users can only access their own private queries.
 *   **Share by Link:** Generate a unique, public URL for a query that can be shared with anyone.
-*   **Data Persistence (PostgreSQL):** Robust data storage for user accounts, queries, and shared query links, ensuring persistence and scalability.
+*   **Data Persistence (PostgreSQL):** Robust data storage for user accounts, queries, and shared query links, ensuring persistence and scalability. Now supports **logging of deleted queries to history**, and **deletion of individual or all history entries**.
 *   **Query History Logging (PostgreSQL):** Automatically logs all newly added or updated queries to a dedicated `query_history` table, storing the query's title, content, and a timestamp for historical tracking.
 
 ### Recent Enhancements
+*   **Navbar Layout Refinement:** The "History" button in the navigation bar has been repositioned to be beside and in front of the "Logout" option for better accessibility and logical grouping.
+*   **History Management:**
+    *   **Delete Individual History Entry:** Added a delete icon to each entry in the Query History, allowing users to remove specific historical queries.
+    *   **Delete All History:** Introduced a "Delete All History" button in the top-right corner of the history view, enabling users to clear their entire query history with a single action (with confirmation).
+*   **Query Timestamp Display:** Each saved query in the "Your Saved Queries" section now prominently displays its last updated time and date in the top-right corner of the query card.
+*   **Search History Integration:** When a user performs a search for a query, all matching queries found are now automatically saved as new entries in the user's query history.
+*   **Autofill Prevention:** Input fields for username and password on the login/registration page now include `autocomplete` attributes to suggest to browsers to prevent automatic pre-filling of credentials, enhancing user control.
 *   **Share by Link:** A share icon (`<i class="bi bi-share"></i>`) now generates a permanent, public link to a query and copies it to the clipboard. Anyone with the link can view the shared query, even without logging in.
 *   **Deployment to Render:** The entire application has been deployed to a public server, making it accessible to everyone on the internet.
 *   **Dynamic Configuration:** The server is now configured to work with environment variables for port and `JWT_SECRET`, and crucially, **PostgreSQL connection details**, allowing it to run in any hosting environment.

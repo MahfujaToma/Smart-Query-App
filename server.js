@@ -5,10 +5,10 @@ const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { Pool } = require('pg'); // Import the Pool from 'pg'
-
+const { MongoClient, ObjectId } = require('mongodb'); // Import MongoClient and ObjectId
 // PostgreSQL Connection Pool Configuration
 // These should ideally come from environment variables
+/*
 const pool = new Pool({
     user: process.env.DB_USER || 'postgres',      // Your PostgreSQL username
     host: process.env.DB_HOST || 'localhost',     // Your PostgreSQL host
@@ -16,8 +16,35 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD || 'your_db_password', // Your PostgreSQL password
     port: process.env.DB_PORT || 5432,            // Default PostgreSQL port
 });
+*/
+
+let db; // MongoDB database instance
+let usersCollection;
+let queriesCollection;
+let sharedQueriesCollection;
+let queryHistoryCollection;
+
+// MongoDB Connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://mahfujatoma5431_db_user:M0dk4EmacAGF0L7S@cluster0.aeffuxp.mongodb.net/?appName=Cluster0'; // Your MongoDB Atlas connection string
+
+async function connectToMongoDB() {
+    const client = new MongoClient(MONGO_URI);
+    try {
+        await client.connect();
+        console.log('Connected to MongoDB Atlas');
+        db = client.db('smart_query_app'); // Specify your database name
+        usersCollection = db.collection('users');
+        queriesCollection = db.collection('queries');
+        sharedQueriesCollection = db.collection('shared_queries');
+        queryHistoryCollection = db.collection('query_history');
+    } catch (error) {
+        console.error('Error connecting to MongoDB Atlas:', error);
+        process.exit(1); // Exit process if MongoDB connection fails
+    }
+}
 
 // Test the database connection
+/*
 pool.connect()
     .then(client => {
         console.log('Connected to PostgreSQL database');
@@ -26,6 +53,7 @@ pool.connect()
     .catch(err => {
         console.error('Error connecting to PostgreSQL database', err.stack);
     });
+*/
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,65 +70,77 @@ app.use(express.static('public')); // Serve static files from 'public' directory
 
 
 
-// --- User Data Access (PostgreSQL) ---
+// --- User Data Access (MongoDB) ---
 async function findUserByUsername(username) {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    return result.rows[0];
+    return await usersCollection.findOne({ username: username });
 }
 
 async function findUserById(id) {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    return result.rows[0];
+    try {
+        return await usersCollection.findOne({ _id: new ObjectId(id) });
+    } catch (error) {
+        // Handle cases where id is not a valid ObjectId format
+        return null;
+    }
 }
 
 async function createUser(username, hashedPassword) {
-    const result = await pool.query(
-        'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
-        [username, hashedPassword]
-    );
-    return result.rows[0];
+    const result = await usersCollection.insertOne({
+        username: username,
+        password: hashedPassword,
+        createdAt: new Date()
+    });
+    return { _id: result.insertedId, username: username }; // Return the new user with MongoDB's _id
+}
 }
 
-// --- Query Data Access (PostgreSQL) ---
+// --- Query Data Access (MongoDB) ---
 async function getUserQueries(userId) {
-    const result = await pool.query('SELECT id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt" FROM queries WHERE user_id = $1 ORDER BY updated_at DESC', [userId]);
-    return result.rows;
+    return await queriesCollection.find({ userId: userId }).sort({ updatedAt: -1 }).toArray();
 }
 
 async function addQuery(userId, title, queryText) {
-    const result = await pool.query(
-        'INSERT INTO queries (user_id, title, query_text) VALUES ($1, $2, $3) RETURNING id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt"',
-        [userId, title, queryText]
-    );
-    return result.rows[0];
+    const newQuery = {
+        userId: userId,
+        title: title,
+        query: queryText,
+        updatedAt: new Date(),
+        createdAt: new Date()
+    };
+    const result = await queriesCollection.insertOne(newQuery);
+    return { ...newQuery, _id: result.insertedId };
 }
 
 async function updateUserQuery(queryId, userId, title, queryText) {
-    const result = await pool.query(
-        'UPDATE queries SET title = $1, query_text = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4 RETURNING id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt"',
-        [title, queryText, queryId, userId]
+    const result = await queriesCollection.findOneAndUpdate(
+        { _id: new ObjectId(queryId), userId: userId },
+        { $set: { title: title, query: queryText, updatedAt: new Date() } },
+        { returnDocument: 'after' } // Return the updated document
     );
-    return result.rows[0];
+    // MongoDB returns { value: doc } or null if not found
+    return result.value;
 }
 
 async function deleteUserQuery(queryId, userId) {
-    const result = await pool.query('DELETE FROM queries WHERE id = $1 AND user_id = $2 RETURNING id', [queryId, userId]);
-    return result.rowCount > 0;
+    const result = await queriesCollection.deleteOne({ _id: new ObjectId(queryId), userId: userId });
+    return result.deletedCount > 0;
 }
 
 async function getQueryByIdAndUserId(queryId, userId) {
-    const result = await pool.query('SELECT id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt" FROM queries WHERE id = $1 AND user_id = $2', [queryId, userId]);
-    return result.rows[0];
+    return await queriesCollection.findOne({ _id: new ObjectId(queryId), userId: userId });
 }
 
-// --- Query History Data Access (PostgreSQL) ---
+// --- Query History Data Access (MongoDB) ---
 async function addQueryToHistory(userId, title, queryText) {
     try {
-        const result = await pool.query(
-            'INSERT INTO query_history (user_id, title, query_text) VALUES ($1, $2, $3) RETURNING id, user_id AS "userId", title, query_text AS query, created_at AS "createdAt"',
-            [userId, title, queryText]
-        );
-        return result.rows[0];
+        const historyEntry = {
+            userId: userId,
+            title: title,
+            query: queryText,
+            createdAt: new Date()
+        };
+        const result = await queryHistoryCollection.insertOne(historyEntry);
+        return { ...historyEntry, _id: result.insertedId };
     } catch (error) {
         console.error('Error adding query to history:', error);
         throw error;
@@ -109,11 +149,7 @@ async function addQueryToHistory(userId, title, queryText) {
 
 async function getHistoryForUser(userId) {
     try {
-        const result = await pool.query(
-            'SELECT id, user_id AS "userId", title, query_text AS query, created_at AS "createdAt" FROM query_history WHERE user_id = $1 ORDER BY created_at DESC',
-            [userId]
-        );
-        return result.rows;
+        return await queryHistoryCollection.find({ userId: userId }).sort({ createdAt: -1 }).toArray();
     } catch (error) {
         console.error('Error fetching query history:', error);
         throw error;
@@ -122,8 +158,8 @@ async function getHistoryForUser(userId) {
 
 async function deleteQueryHistoryEntry(historyId, userId) {
     try {
-        const result = await pool.query('DELETE FROM query_history WHERE id = $1 AND user_id = $2 RETURNING id', [historyId, userId]);
-        return result.rowCount > 0;
+        const result = await queryHistoryCollection.deleteOne({ _id: new ObjectId(historyId), userId: userId });
+        return result.deletedCount > 0;
     } catch (error) {
         console.error('Error deleting query history entry:', error);
         throw error;
@@ -132,26 +168,29 @@ async function deleteQueryHistoryEntry(historyId, userId) {
 
 async function deleteAllUserHistory(userId) {
     try {
-        await pool.query('DELETE FROM query_history WHERE user_id = $1', [userId]);
-        return true;
+        const result = await queryHistoryCollection.deleteMany({ userId: userId });
+        return result.deletedCount > 0;
     } catch (error) {
         console.error('Error deleting all user history:', error);
         throw error;
     }
 }
 
-// --- Shared Query Data Access (PostgreSQL) ---
+// --- Shared Query Data Access (MongoDB) ---
 async function addSharedQuery(shareId, title, queryText, originalUserId) {
-    const result = await pool.query(
-        'INSERT INTO shared_queries (share_id, title, query_text, original_user_id) VALUES ($1, $2, $3, $4) RETURNING share_id AS "shareId", title, query_text AS query, original_user_id AS "originalUserId", created_at AS "createdAt"',
-        [shareId, title, queryText, originalUserId]
-    );
-    return result.rows[0];
+    const newSharedQuery = {
+        shareId: shareId,
+        title: title,
+        query: queryText,
+        originalUserId: originalUserId, // This will be an ObjectId
+        createdAt: new Date()
+    };
+    await sharedQueriesCollection.insertOne(newSharedQuery);
+    return newSharedQuery;
 }
 
 async function getSharedQueryById(shareId) {
-    const result = await pool.query('SELECT share_id AS "shareId", title, query_text AS query, original_user_id AS "originalUserId", created_at AS "createdAt" FROM shared_queries WHERE share_id = $1', [shareId]);
-    return result.rows[0];
+    return await sharedQueriesCollection.findOne({ shareId: shareId });
 }
 
 // --- Auth Middleware ---
@@ -162,7 +201,7 @@ const authenticateToken = (req, res, next) => {
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403); // Invalid token
-        req.user = user;
+        req.user = { ...user, id: new ObjectId(user.id) };
         next();
     });
 };
@@ -202,7 +241,7 @@ app.post('/api/login', async (req, res) => {
 
     try {
         if (await bcrypt.compare(password, user.password)) {
-            const accessToken = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+            const accessToken = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
             res.json({ accessToken });
         } else {
             res.status(403).send('Not Allowed. Incorrect password.');
@@ -245,7 +284,7 @@ app.post('/api/queries', authenticateToken, async (req, res) => {
 // Update a user's query (using POST as a workaround)
 app.post('/api/queries/update/:id', authenticateToken, async (req, res) => {
     console.log('POST /api/queries/update/:id request received');
-    const queryId = parseInt(req.params.id);
+    const queryId = req.params.id; // Removed parseInt
     const { title, query } = req.body;
 
     if (!title || !query) {
@@ -269,7 +308,7 @@ app.post('/api/queries/update/:id', authenticateToken, async (req, res) => {
 // Delete a user's query
 app.delete('/api/queries/:id', authenticateToken, async (req, res) => {
     console.log('DELETE /api/queries/:id request received');
-    const queryId = parseInt(req.params.id);
+    const queryId = req.params.id; // Removed parseInt
     const userId = req.user.id;
 
     try {
@@ -288,7 +327,7 @@ app.delete('/api/queries/:id', authenticateToken, async (req, res) => {
 
         if (!deleted) {
             // This case should not be reached if the find query worked, but for safety
-            return res.status(4_04).send('Query not found during deletion.');
+            return res.status(404).send('Query not found during deletion.');
         }
 
         res.sendStatus(204); // Success
@@ -340,7 +379,7 @@ app.delete('/api/history/all', authenticateToken, async (req, res) => {
 // Delete a query history entry
 app.delete('/api/history/:id', authenticateToken, async (req, res) => {
     console.log('DELETE /api/history/:id request received');
-    const historyId = parseInt(req.params.id);
+    const historyId = req.params.id; // Removed parseInt
     const userId = req.user.id;
 
     try {
@@ -359,18 +398,20 @@ app.delete('/api/history/:id', authenticateToken, async (req, res) => {
 // --- Debug Route (for viewing data on free tier) ---
 app.get('/api/debug/get-all-data-for-mahfuja', async (req, res) => {
     try {
-        const usersResult = await pool.query('SELECT id, username FROM users');
-        const queriesResult = await pool.query('SELECT id, user_id AS "userId", title, query_text AS query, updated_at AS "updatedAt" FROM queries');
-        const sharedQueriesResult = await pool.query('SELECT share_id AS "shareId", title, query_text AS query, original_user_id AS "originalUserId", created_at AS "createdAt" FROM shared_queries');
-        
+        const usersResult = await usersCollection.find({}).toArray();
+        const queriesResult = await queriesCollection.find({}).toArray();
+        const sharedQueriesResult = await sharedQueriesCollection.find({}).toArray();
+        const queryHistoryResult = await queryHistoryCollection.find({}).toArray(); // Also include history
+
         res.json({
-            users: usersResult.rows,
-            queries: queriesResult.rows,
-            sharedQueries: sharedQueriesResult.rows
+            users: usersResult,
+            queries: queriesResult,
+            sharedQueries: sharedQueriesResult,
+            queryHistory: queryHistoryResult
         });
     } catch (error) {
-        console.error('Error fetching debug data from PostgreSQL:', error);
-        res.status(500).json({ error: 'Failed to read data from PostgreSQL.', details: error.message });
+        console.error('Error fetching debug data from MongoDB:', error);
+        res.status(500).json({ error: 'Failed to read data from MongoDB.', details: error.message });
     }
 });
 
@@ -379,7 +420,7 @@ app.get('/api/debug/get-all-data-for-mahfuja', async (req, res) => {
 
 // Create a shareable link for a query
 app.post('/api/queries/share/:id', authenticateToken, async (req, res) => {
-    const queryId = parseInt(req.params.id);
+    const queryId = req.params.id;
 
     try {
         const queryToShare = await getQueryByIdAndUserId(queryId, req.user.id);
@@ -480,7 +521,11 @@ app.get('/share/:shareId', async (req, res) => {
 
 
 // --- Start Server ---
-app.listen(PORT, () => {
-    console.log(`Smart Query Server v2 is active on http://localhost:${PORT}`);
+async function startServer() {
+    await connectToMongoDB();
+    app.listen(PORT, () => {
+        console.log(`Smart Query Server v2 is active on http://localhost:${PORT}`);
+    });
+}
 
-});
+startServer();
