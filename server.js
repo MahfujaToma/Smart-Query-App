@@ -92,7 +92,6 @@ async function createUser(username, hashedPassword) {
     });
     return { _id: result.insertedId, username: username }; // Return the new user with MongoDB's _id
 }
-}
 
 // --- Query Data Access (MongoDB) ---
 async function getUserQueries(userId) {
