@@ -1,15 +1,19 @@
 {
-  "name": "smart-query-backend",
+  "name": "smart-query-app",
   "version": "1.0.0",
-  "description": "Backend for the Smart Query App",
-  "main": "server.js",
+  "description": "Full-stack Smart Query App on Cloudflare",
+  "main": "functions/api/[[path]].js",
   "scripts": {
-    "start": "node server.js"
+    "build": "echo 'No build needed for static files'",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "jsonwebtoken": "^9.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
