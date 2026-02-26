@@ -5,70 +5,66 @@ const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { MongoClient, ObjectId } = require('mongodb'); // Import MongoClient and ObjectId
-// PostgreSQL Connection Pool Configuration
-// These should ideally come from environment variables
-/*
-const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',      // Your PostgreSQL username
-    host: process.env.DB_HOST || 'localhost',     // Your PostgreSQL host
-    database: process.env.DB_NAME || 'smart_query_app', // The database you created
-    password: process.env.DB_PASSWORD || 'your_db_password', // Your PostgreSQL password
-    port: process.env.DB_PORT || 5432,            // Default PostgreSQL port
-});
-*/
+const { MongoClient, ObjectId } = require('mongodb');
 
-let db; // MongoDB database instance
+let db;
 let usersCollection;
 let queriesCollection;
 let sharedQueriesCollection;
 let queryHistoryCollection;
 
 // MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://mahfujatoma5431_db_user:M0dk4EmacAGF0L7S@cluster0.aeffuxp.mongodb.net/?appName=Cluster0'; // Your MongoDB Atlas connection string
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+    console.error('ERROR: MONGO_URI is not defined in environment variables.');
+    process.exit(1);
+}
 
 async function connectToMongoDB() {
     const client = new MongoClient(MONGO_URI);
     try {
         await client.connect();
         console.log('Connected to MongoDB Atlas');
-        db = client.db('smart_query_app'); // Specify your database name
+        db = client.db('smart_query_app');
         usersCollection = db.collection('users');
         queriesCollection = db.collection('queries');
         sharedQueriesCollection = db.collection('shared_queries');
         queryHistoryCollection = db.collection('query_history');
     } catch (error) {
         console.error('Error connecting to MongoDB Atlas:', error);
-        process.exit(1); // Exit process if MongoDB connection fails
+        process.exit(1);
     }
 }
-
-// Test the database connection
-/*
-pool.connect()
-    .then(client => {
-        console.log('Connected to PostgreSQL database');
-        client.release(); // Release the client back to the pool
-    })
-    .catch(err => {
-        console.error('Error connecting to PostgreSQL database', err.stack);
-    });
-*/
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-
-
 // Secret key for JWT
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-that-should-be-in-an-env-file';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    console.error('ERROR: JWT_SECRET is not defined. The app cannot start safely without it.');
+    process.exit(1);
+}
+
+// Utility to map MongoDB _id to id for the frontend
+const mapId = (doc) => {
+    if (!doc) return null;
+    if (Array.isArray(doc)) return doc.map(mapId);
+    const { _id, ...rest } = doc;
+    return { id: _id.toString(), ...rest };
+};
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public')); // Serve static files from 'public' directory
+app.use(express.static('public'));
 
-
+// Health check for Koyeb
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
 // --- User Data Access (MongoDB) ---
 async function findUserByUsername(username) {
@@ -79,7 +75,6 @@ async function findUserById(id) {
     try {
         return await usersCollection.findOne({ _id: new ObjectId(id) });
     } catch (error) {
-        // Handle cases where id is not a valid ObjectId format
         return null;
     }
 }
@@ -90,12 +85,13 @@ async function createUser(username, hashedPassword) {
         password: hashedPassword,
         createdAt: new Date()
     });
-    return { _id: result.insertedId, username: username }; // Return the new user with MongoDB's _id
+    return { id: result.insertedId.toString(), username: username };
 }
 
 // --- Query Data Access (MongoDB) ---
 async function getUserQueries(userId) {
-    return await queriesCollection.find({ userId: userId }).sort({ updatedAt: -1 }).toArray();
+    const queries = await queriesCollection.find({ userId: userId }).sort({ updatedAt: -1 }).toArray();
+    return mapId(queries);
 }
 
 async function addQuery(userId, title, queryText) {
@@ -107,17 +103,16 @@ async function addQuery(userId, title, queryText) {
         createdAt: new Date()
     };
     const result = await queriesCollection.insertOne(newQuery);
-    return { ...newQuery, _id: result.insertedId };
+    return mapId({ ...newQuery, _id: result.insertedId });
 }
 
 async function updateUserQuery(queryId, userId, title, queryText) {
     const result = await queriesCollection.findOneAndUpdate(
         { _id: new ObjectId(queryId), userId: userId },
         { $set: { title: title, query: queryText, updatedAt: new Date() } },
-        { returnDocument: 'after' } // Return the updated document
+        { returnDocument: 'after' }
     );
-    // MongoDB returns { value: doc } or null if not found
-    return result.value;
+    return mapId(result.value);
 }
 
 async function deleteUserQuery(queryId, userId) {
@@ -139,7 +134,7 @@ async function addQueryToHistory(userId, title, queryText) {
             createdAt: new Date()
         };
         const result = await queryHistoryCollection.insertOne(historyEntry);
-        return { ...historyEntry, _id: result.insertedId };
+        return mapId({ ...historyEntry, _id: result.insertedId });
     } catch (error) {
         console.error('Error adding query to history:', error);
         throw error;
@@ -148,7 +143,8 @@ async function addQueryToHistory(userId, title, queryText) {
 
 async function getHistoryForUser(userId) {
     try {
-        return await queryHistoryCollection.find({ userId: userId }).sort({ createdAt: -1 }).toArray();
+        const history = await queryHistoryCollection.find({ userId: userId }).sort({ createdAt: -1 }).toArray();
+        return mapId(history);
     } catch (error) {
         console.error('Error fetching query history:', error);
         throw error;
@@ -181,7 +177,7 @@ async function addSharedQuery(shareId, title, queryText, originalUserId) {
         shareId: shareId,
         title: title,
         query: queryText,
-        originalUserId: originalUserId, // This will be an ObjectId
+        originalUserId: originalUserId,
         createdAt: new Date()
     };
     await sharedQueriesCollection.insertOne(newSharedQuery);
@@ -196,10 +192,10 @@ async function getSharedQueryById(shareId) {
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.sendStatus(401); // No token
+    if (token == null) return res.sendStatus(401);
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403); // Invalid token
+        if (err) return res.sendStatus(403);
         req.user = { ...user, id: new ObjectId(user.id) };
         next();
     });
@@ -390,27 +386,6 @@ app.delete('/api/history/:id', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error deleting query history entry:', error);
         res.status(500).send('Internal server error.');
-    }
-});
-
-
-// --- Debug Route (for viewing data on free tier) ---
-app.get('/api/debug/get-all-data-for-mahfuja', async (req, res) => {
-    try {
-        const usersResult = await usersCollection.find({}).toArray();
-        const queriesResult = await queriesCollection.find({}).toArray();
-        const sharedQueriesResult = await sharedQueriesCollection.find({}).toArray();
-        const queryHistoryResult = await queryHistoryCollection.find({}).toArray(); // Also include history
-
-        res.json({
-            users: usersResult,
-            queries: queriesResult,
-            sharedQueries: sharedQueriesResult,
-            queryHistory: queryHistoryResult
-        });
-    } catch (error) {
-        console.error('Error fetching debug data from MongoDB:', error);
-        res.status(500).json({ error: 'Failed to read data from MongoDB.', details: error.message });
     }
 });
 
