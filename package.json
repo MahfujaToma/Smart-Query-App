@@ -4,14 +4,13 @@
   "description": "Full-stack Smart Query App on Cloudflare",
   "main": "functions/api/[[path]].js",
   "scripts": {
-    "build": "echo 'No build needed for static files'",
+    "build": "echo 'No build needed'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "bcryptjs": "^2.4.3",
-    "cors": "^2.8.6",
-    "jsonwebtoken": "^9.0.3"
+    "jose": "^5.9.6"
   },
   "engines": {
     "node": ">=18.0.0"
