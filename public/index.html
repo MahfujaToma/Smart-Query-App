@@ -908,7 +908,11 @@
 
             const filteredQueries = showAllKeywords.includes(lowercasedSearchTerm) || !lowercasedSearchTerm
                 ? queries
-                : queries.filter(q => q.title.toLowerCase() === lowercasedSearchTerm);
+                : queries.filter(q => {
+                    const titleMatch = q.title.toLowerCase().includes(lowercasedSearchTerm);
+                    const sqlMatch = (q.query_text || q.query || "").toLowerCase().includes(lowercasedSearchTerm);
+                    return titleMatch || sqlMatch;
+                });
 
             return (
                 <div className="main-app-container">
