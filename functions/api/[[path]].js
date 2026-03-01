@@ -115,6 +115,49 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ shareLink: `${url.origin}/share/${shared.share_id}` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // --- AI ASSISTANT ---
+    if (path.startsWith('ai/') && method === 'POST') {
+      const aiAction = path.split('/').pop(); // explain, fix, or generate
+      const { text, query } = await request.json();
+      
+      if (!env.GEMINI_API_KEY) {
+        return new Response('AI Assistant is not configured (API Key missing).', { status: 500, headers: corsHeaders });
+      }
+
+      let prompt = "";
+      if (aiAction === 'explain') {
+        prompt = `Explain this SQL query in plain, concise English:\n\n${query}`;
+      } else if (aiAction === 'fix') {
+        prompt = `Fix any syntax errors in this SQL query and return ONLY the corrected SQL code. Do not include any explanation or markdown formatting:\n\n${query}`;
+      } else if (aiAction === 'generate') {
+        prompt = `Generate a valid SQL query based on this description. Return ONLY the SQL code. Do not include any explanation or markdown formatting:\n\n${text}`;
+      } else {
+        return new Response('Invalid AI action', { status: 400, headers: corsHeaders });
+      }
+
+      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      if (!aiResponse.ok) {
+        const errData = await aiResponse.text();
+        return new Response(`AI Error: ${errData}`, { status: aiResponse.status, headers: corsHeaders });
+      }
+
+      const data = await aiResponse.json();
+      let result = data.candidates[0].content.parts[0].text.trim();
+      
+      // Clean up AI code blocks if present
+      if (result.startsWith('```sql')) result = result.replace(/^```sql\n?/, '').replace(/\n?```$/, '');
+      if (result.startsWith('```')) result = result.replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+      return new Response(JSON.stringify({ result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   } catch (err) {
     return new Response(err.message, { status: 500, headers: corsHeaders });
