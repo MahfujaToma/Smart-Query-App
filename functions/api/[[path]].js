@@ -137,7 +137,7 @@ export async function onRequest(context) {
         prompt = `Generate a valid SQL query based on this description. Return ONLY the SQL code. Do not include any explanation or markdown formatting:\n\n${text}`;
       }
 
-      const models = ['gemini-1.5-flash', 'gemini-pro'];
+      const models = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'];
       let lastError = '';
 
       for (const model of models) {
