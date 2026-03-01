@@ -122,11 +122,13 @@ export async function onRequest(context) {
       
       const apiKey = env.GEMINI_API_KEY;
       if (!apiKey) {
-        return new Response(JSON.stringify({ error: 'Backend Error: env.GEMINI_API_KEY is undefined. Please check Cloudflare environment variables.' }), { 
+        return new Response(JSON.stringify({ error: 'Backend Error: env.GEMINI_API_KEY is undefined.' }), { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
       }
+
+      const keySnippet = apiKey.trim().substring(0, 6); // Safely show start of key for debugging
 
       let prompt = "";
       if (aiAction === 'explain') {
@@ -137,7 +139,14 @@ export async function onRequest(context) {
         prompt = `Generate a valid SQL query based on this description. Return ONLY the SQL code. Do not include any explanation or markdown formatting:\n\n${text}`;
       }
 
-      const models = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'];
+      // Expanded list of models to try
+      const models = [
+        'gemini-1.5-flash', 
+        'gemini-1.5-flash-latest', 
+        'gemini-1.5-pro', 
+        'gemini-pro',
+        'gemini-1.0-pro'
+      ];
       let lastError = '';
 
       for (const model of models) {
@@ -162,7 +171,7 @@ export async function onRequest(context) {
           } 
           
           const errData = await aiResponse.text();
-          lastError = `Model ${model} failed: ${aiResponse.status} - ${errData}`;
+          lastError = `Model ${model} failed (Key starts with ${keySnippet}): ${aiResponse.status} - ${errData}`;
         } catch (e) {
           lastError = `Fetch to ${model} failed: ${e.message}`;
         }
