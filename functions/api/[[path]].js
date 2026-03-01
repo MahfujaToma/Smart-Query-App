@@ -117,7 +117,7 @@ export async function onRequest(context) {
 
     // --- AI ASSISTANT ---
     if (path.startsWith('ai/') && method === 'POST') {
-      const aiAction = path.split('/').pop(); // explain, fix, or generate
+      const aiAction = path.split('/').pop();
       const { text, query } = await request.json();
       
       const apiKey = env.GEMINI_API_KEY ? env.GEMINI_API_KEY.trim() : null;
@@ -137,13 +137,40 @@ export async function onRequest(context) {
         prompt = `Generate a valid SQL query based on this description. Return ONLY the SQL code. Do not include any explanation or markdown formatting:\n\n${text}`;
       }
 
-      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
+      const models = ['gemini-1.5-flash', 'gemini-pro'];
+      let lastError = '';
+
+      for (const model of models) {
+        try {
+          const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }]
+            })
+          });
+
+          if (aiResponse.ok) {
+            const data = await aiResponse.json();
+            let result = data.candidates[0].content.parts[0].text.trim();
+            // Clean up AI code blocks
+            if (result.startsWith('```sql')) result = result.replace(/^```sql\n?/, '').replace(/\n?```$/, '');
+            if (result.startsWith('```')) result = result.replace(/^```\n?/, '').replace(/\n?```$/, '');
+            return new Response(JSON.stringify({ result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          } else {
+            const errData = await aiResponse.text();
+            lastError = `${model}: ${errData}`;
+          }
+        } catch (e) {
+          lastError = `${model}: ${e.message}`;
+        }
+      }
+
+      return new Response(JSON.stringify({ error: `AI Error (All models failed): ${lastError}` }), { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
+    }
 
       if (!aiResponse.ok) {
         const errText = await aiResponse.text();
