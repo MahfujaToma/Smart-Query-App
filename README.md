@@ -14,57 +14,54 @@ The application is now serverless. Any changes pushed to the `main` branch of th
 
 ## Features Implemented
 
-### Frontend
-*   **User Authentication UI:** Dedicated Login and Registration pages, providing clear feedback for user interactions, with **autofill prevention** for username and password fields.
-*   **Query Management UI:** Comprehensive interface to add new queries, view existing ones, search by title, and manage individual queries (edit, delete), now displaying **last updated timestamp** on each query card.
-*   **Responsive Design:** Styled using Bootstrap for a consistent and adaptive user experience across various devices.
-*   **Inline Editing:** Directly edit query titles and content within the UI, with a visible "Save Changes" button appearing when modifications are detected.
-*   **Query Sharing:** Integrated sharing functionality that generates a unique public link for any saved query, making it easy to share with others.
-*   **React-based SPA:** Built as a Single Page Application using React (via CDN) for a dynamic and interactive user experience.
-*   **Query History:** A dedicated "History" button in the title bar to view a chronological list of recently executed or updated queries. Now includes **individual delete options for history entries** and a **"Delete All History" button**. **Search results are also automatically saved to history**.
+### Frontend (Power User Tools)
+*   **Dark Mode Toggle:** Integrated a system-persistent dark theme for low-light environments.
+*   **Syntax Highlighting:** Integrated **Prism.js** for beautiful, readable SQL code blocks.
+*   **Live Query Execution:** Directly execute SQL queries against your Supabase database and view results in a real-time table.
+*   **SQL Auto-Formatter:** One-click SQL beautification using **sql-formatter**.
+*   **Keyboard Shortcuts:**
+    *   `Ctrl + S`: Quick save changes.
+    *   `Ctrl + Enter`: Auto-format SQL.
+    *   `Ctrl + F`: Focus search bar.
+    *   `Ctrl + I`: Trigger backup import.
+*   **Empty States:** Modern, visual illustrations for empty libraries and history logs.
+*   **Search Improvements:** Enhanced search functionality that looks inside both query titles and the SQL content itself.
+
+### Data & Sharing
+*   **Flexible Export/Import:** Backup and restore your entire library as structured **JSON** or human-readable **TXT** documents.
+*   **Professional Share Page:** Customized public pages for shared queries featuring syntax highlighting, a "Copy Code" button, and automatic dark mode support.
+
+### User Management
+*   **User Authentication UI:** Dedicated Login and Registration pages with autofill prevention and clear feedback.
+*   **Query Management:** Full CRUD (Create, Read, Update, Delete) capabilities with inline editing.
+*   **Query History:** Automated chronological logging of all query activities with individual and bulk delete options.
 
 ### Backend (Serverless)
-*   **Edge Functions:** Entire backend logic migrated to **Cloudflare Pages Functions** for zero latency and high availability.
-*   **User Registration & Login:** Secure user accounts with `bcryptjs` password hashing and `jose` for lightweight JWT session management.
-*   **Authenticated API Endpoints:** Ensures users can only access their own private queries.
-*   **Share by Link:** Generate a unique, public URL for a query that can be shared with anyone, served via dynamic Cloudflare Functions.
-*   **Data Persistence (Supabase/PostgreSQL):** Robust PostgreSQL data storage for user accounts, queries, and shared query links, ensuring permanent persistence on a free cloud tier.
-*   **Query History Logging (Supabase):** Automatically logs all newly added, updated, or deleted queries to a dedicated `query_history` table.
+*   **Edge Functions:** Backend logic powered by **Cloudflare Pages Functions**.
+*   **Data Persistence:** Robust PostgreSQL storage via **Supabase**.
+*   **Live SQL RPC:** A custom `exec_sql` PostgreSQL function allowing safe, dynamic query execution from the frontend.
+*   **Auth:** Secure session management using `jose` (JWT) and `bcryptjs`.
 
-### Recent Enhancements
-*   **Migration to Cloudflare Pages:** Moved from Render to Cloudflare Pages to eliminate "Cold Start" lag. The application is now "Instant-On."
-*   **Migration to Supabase:** Transitioned from MongoDB Atlas to **Supabase (PostgreSQL)** for better alignment with SQL-like query storage and faster database response times.
-*   **Edge-Compatible Libraries:** Swapped `jsonwebtoken` for `jose` and `bcrypt` for `bcryptjs` to ensure 100% compatibility with Cloudflare's serverless environment.
-*   **PostgreSQL Schema:** Implemented a relational schema for users, queries, history, and sharing, with automatic UUID generation.
-*   **Dynamic Sharing Functions:** Implemented specialized Cloudflare functions to serve shared queries dynamically.
-*   **History Management:**
-    *   **Delete Individual History Entry:** Added a delete icon to each entry in the Query History.
-    *   **Delete All History:** Introduced a "Delete All History" button in the top-right corner of the history view.
-*   **Query Timestamp Display:** Each saved query prominently displays its last updated time and date.
+## Technical Stack
 
-## Technical Stack (AI Assistant Active)
-
-*   **Frontend:** HTML, CSS, JavaScript (React v18 via CDN, Babel for JSX)
-*   **Backend:** Cloudflare Pages Functions (Serverless Node.js)
+*   **Frontend:** HTML, CSS, JavaScript (React v18 via CDN, Babel, Bootstrap 5, Prism.js, Sql-Formatter)
+*   **Backend:** Cloudflare Pages Functions (Edge Runtime)
 *   **Database:** Supabase (PostgreSQL)
 *   **Authentication:** `bcryptjs`, `jose` (JWT)
-*   **Deployment:** GitHub (Version Control), Cloudflare Pages (Hosting)
 
 ## Data Storage (Supabase/PostgreSQL)
 
-The application uses **Supabase** for persistent data storage.
-
-*   **users:** Stores user credentials with UUID primary keys.
-*   **queries:** Stores saved queries linked to user UUIDs.
-*   **shared_queries:** Stores public links to queries with unique `share_id`s.
-*   **query_history:** Stores a chronological log of query activities.
+*   **users:** User credentials with UUID primary keys.
+*   **queries:** Saved queries linked to user IDs.
+*   **shared_queries:** Publicly accessible query snippets.
+*   **query_history:** Log of recent user actions.
 
 ## Local Development Setup
 
 ### Prerequisites
-1.  **Node.js and npm:** Install from [nodejs.org](https://nodejs.org/en/download).
-2.  **Git:** Install from [git-scm.com](https://git-scm.com/downloads).
-3.  **Wrangler (Optional):** Install Cloudflare's CLI tool (`npm install -g wrangler`) to test functions locally.
+1.  **Node.js and npm:** [nodejs.org](https://nodejs.org/).
+2.  **Git:** [git-scm.com](https://git-scm.com/).
+3.  **Wrangler:** `npm install -g wrangler` (for local Cloudflare testing).
 
 ### Instructions
 1.  **Clone the Repository:**
@@ -77,15 +74,12 @@ The application uses **Supabase** for persistent data storage.
     npm install
     ```
 3.  **Local Testing:**
-    Use Wrangler to run the project locally:
     ```bash
     npx wrangler pages dev public
     ```
 
 ## Key Files
 
-*   `package.json`: Project metadata and dependencies (Jose, Supabase, BcryptJS).
-*   `functions/api/[[path]].js`: The core Cloudflare Function for the backend API.
-*   `functions/share/[shareId].js`: Function to serve public shared query pages.
-*   `public/index.html`: The entire React frontend application.
-*   `.gitignore`: Specifies files for Git to ignore.
+*   `functions/api/[[path]].js`: Core backend API.
+*   `functions/share/[shareId].js`: Professional public share page renderer.
+*   `public/index.html`: The enhanced React SPA frontend.
