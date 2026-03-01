@@ -344,6 +344,9 @@
             const [isQueryEditing, setIsQueryEditing] = useState(false);
             const [editedTitle, setEditedTitle] = useState(query.title);
             const [editedQuery, setEditedQuery] = useState(query.query_text || query.query || "");
+            const [results, setResults] = useState(null);
+            const [isExecuting, setIsExecuting] = useState(false);
+            const [execError, setExecError] = useState(null);
             const textAreaRef = useRef(null);
             const codeRef = useRef(null);
 
@@ -373,6 +376,26 @@
                     setEditedQuery(sqlFormatter.format(editedQuery));
                 } catch (e) {
                     console.error("Format error", e);
+                }
+            };
+
+            const handleRun = async () => {
+                setIsExecuting(true);
+                setExecError(null);
+                setResults(null);
+                try {
+                    const response = await fetch(`${API_URL}/execute`, {
+                        method: 'POST',
+                        headers: getAuthHeader(),
+                        body: JSON.stringify({ query: editedQuery })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || "Execution failed.");
+                    setResults(data.results);
+                } catch (err) {
+                    setExecError(err.message);
+                } finally {
+                    setIsExecuting(false);
                 }
             };
 
@@ -445,6 +468,9 @@
                              </div>
                             <div className="text-end">
                                 <div className="btn-group">
+                                    <button onClick={handleRun} disabled={isExecuting} className="btn btn-sm btn-primary" title="Run Query">
+                                        {isExecuting ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-play-fill"></i>}
+                                    </button>
                                     <button onClick={() => setIsQueryEditing(!isQueryEditing)} className={`btn btn-sm ${isQueryEditing ? 'btn-info' : 'btn-outline-info'}`} title="Edit SQL">
                                         <i className="bi bi-code-slash"></i>
                                     </button>
@@ -481,6 +507,36 @@
                                 </div>
                             )}
                         </div>
+
+                        {execError && (
+                            <div className="alert alert-danger mt-3 py-2 small">
+                                <i className="bi bi-exclamation-triangle-fill me-2"></i>{execError}
+                            </div>
+                        )}
+
+                        {results && (
+                            <div className="mt-3 table-responsive" style={{maxHeight: '300px'}}>
+                                <table className="table table-sm table-striped table-hover border small">
+                                    <thead className="table-light sticky-top">
+                                        <tr>
+                                            {results.length > 0 && Object.keys(results[0]).map(key => (
+                                                <th key={key}>{key}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {results.map((row, i) => (
+                                            <tr key={i}>
+                                                {Object.values(row).map((val, j) => (
+                                                    <td key={j}>{val === null ? 'NULL' : val.toString()}</td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                        {results.length === 0 && <tr><td className="text-center text-muted py-3">No rows returned.</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
 
                         {isDirty && (
                              <button onClick={handleSave} className="btn btn-success btn-sm mt-3 w-100 fw-bold">

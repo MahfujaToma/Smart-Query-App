@@ -115,6 +115,25 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ shareLink: `${url.origin}/share/${shared.share_id}` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // --- LIVE EXECUTION ---
+    if (path === 'execute' && method === 'POST') {
+      const { query: sql } = await request.json();
+      
+      // We use an RPC function named 'exec_sql' which we will create in Supabase
+      const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
+
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
+
+      return new Response(JSON.stringify({ results: data }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   } catch (err) {
     return new Response(err.message, { status: 500, headers: corsHeaders });
