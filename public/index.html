@@ -291,8 +291,8 @@
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('authToken')}` },
                         body: JSON.stringify({ text: prompt })
                     });
-                    if (!response.ok) throw new Error("AI Error");
                     const data = await response.json();
+                    if (!response.ok) throw new Error(data.result || data.error || "AI Error");
                     setQuery(data.result);
                 } catch (err) {
                     alert("AI error: " + err.message);
@@ -439,8 +439,8 @@
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('authToken')}` },
                         body: JSON.stringify({ query: editedQuery })
                     });
-                    if (!response.ok) throw new Error("AI Error");
                     const data = await response.json();
+                    if (!response.ok) throw new Error(data.result || data.error || "AI Error");
                     
                     if (action === 'explain') {
                         alert(`AI Explanation:\n\n${data.result}`);

@@ -144,8 +144,15 @@ export async function onRequest(context) {
       });
 
       if (!aiResponse.ok) {
-        const errData = await aiResponse.text();
-        return new Response(`AI Error: ${errData}`, { status: aiResponse.status, headers: corsHeaders });
+        const errText = await aiResponse.text();
+        let errorMessage = 'AI Service Error';
+        try {
+          const errJson = JSON.parse(errText);
+          errorMessage = errJson.error?.message || errText;
+        } catch (e) {
+          errorMessage = errText;
+        }
+        return new Response(`AI Error: ${errorMessage}`, { status: aiResponse.status, headers: corsHeaders });
       }
 
       const data = await aiResponse.json();
