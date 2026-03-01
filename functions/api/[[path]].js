@@ -142,7 +142,6 @@ export async function onRequest(context) {
       // Expanded list of models to try
       const models = [
         'gemini-1.5-flash', 
-        'gemini-1.5-flash-latest', 
         'gemini-1.5-pro', 
         'gemini-pro',
         'gemini-1.0-pro'
@@ -160,8 +159,10 @@ export async function onRequest(context) {
             })
           });
 
+          const responseText = await aiResponse.text();
+
           if (aiResponse.ok) {
-            const data = await aiResponse.json();
+            const data = JSON.parse(responseText);
             if (data.candidates && data.candidates[0] && data.candidates[0].content) {
               let result = data.candidates[0].content.parts[0].text.trim();
               if (result.startsWith('```sql')) result = result.replace(/^```sql\n?/, '').replace(/\n?```$/, '');
@@ -170,8 +171,7 @@ export async function onRequest(context) {
             }
           } 
           
-          const errData = await aiResponse.text();
-          lastError = `Model ${model} failed (Key starts with ${keySnippet}): ${aiResponse.status} - ${errData}`;
+          lastError = `Model ${model} (${aiResponse.status}): ${responseText}`;
         } catch (e) {
           lastError = `Fetch to ${model} failed: ${e.message}`;
         }
