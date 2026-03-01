@@ -120,8 +120,12 @@ export async function onRequest(context) {
       const aiAction = path.split('/').pop(); // explain, fix, or generate
       const { text, query } = await request.json();
       
-      if (!env.GEMINI_API_KEY) {
-        return new Response('AI Assistant is not configured (API Key missing).', { status: 500, headers: corsHeaders });
+      const apiKey = env.GEMINI_API_KEY ? env.GEMINI_API_KEY.trim() : null;
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: 'AI Assistant is not configured (API Key missing).' }), { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
       let prompt = "";
@@ -131,11 +135,9 @@ export async function onRequest(context) {
         prompt = `Fix any syntax errors in this SQL query and return ONLY the corrected SQL code. Do not include any explanation or markdown formatting:\n\n${query}`;
       } else if (aiAction === 'generate') {
         prompt = `Generate a valid SQL query based on this description. Return ONLY the SQL code. Do not include any explanation or markdown formatting:\n\n${text}`;
-      } else {
-        return new Response('Invalid AI action', { status: 400, headers: corsHeaders });
       }
 
-      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
