@@ -172,31 +172,6 @@ export async function onRequest(context) {
       });
     }
 
-      if (!aiResponse.ok) {
-        const errText = await aiResponse.text();
-        let errorMessage = 'AI Service Error';
-        try {
-          const errJson = JSON.parse(errText);
-          errorMessage = errJson.error?.message || errText;
-        } catch (e) {
-          errorMessage = errText;
-        }
-        return new Response(JSON.stringify({ error: errorMessage }), { 
-          status: aiResponse.status, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        });
-      }
-
-      const data = await aiResponse.json();
-      let result = data.candidates[0].content.parts[0].text.trim();
-      
-      // Clean up AI code blocks if present
-      if (result.startsWith('```sql')) result = result.replace(/^```sql\n?/, '').replace(/\n?```$/, '');
-      if (result.startsWith('```')) result = result.replace(/^```\n?/, '').replace(/\n?```$/, '');
-
-      return new Response(JSON.stringify({ result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   } catch (err) {
     return new Response(err.message, { status: 500, headers: corsHeaders });
