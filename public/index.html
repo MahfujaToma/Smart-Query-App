@@ -205,12 +205,20 @@
         }
 
         // --- Main App Components ---
-        function TitleBar({ onLogout, onShowHistory, theme, onToggleTheme }) {
+        function TitleBar({ onLogout, onShowHistory, theme, onToggleTheme, onExport, onImportClick }) {
             return (
                 <nav className={`navbar fixed-top ${theme === 'dark' ? 'navbar-dark bg-dark shadow' : 'navbar-dark bg-dark shadow'}`}>
                     <div className="container-fluid d-flex justify-content-between align-items-center">
                         <span className="navbar-brand mb-0 h1 mx-auto text-info"><i className="bi bi-search"></i> Smart Query App</span>
                         <div className="d-flex align-items-center">
+                            <div className="btn-group me-2">
+                                <button onClick={onExport} className="btn btn-sm btn-outline-light" title="Export Backup (JSON)">
+                                    <i className="bi bi-download"></i>
+                                </button>
+                                <button onClick={onImportClick} className="btn btn-sm btn-outline-light" title="Import Backup (JSON)">
+                                    <i className="bi bi-upload"></i>
+                                </button>
+                            </div>
                             <button 
                                 onClick={onToggleTheme} 
                                 className="btn btn-sm btn-outline-warning me-2" 
@@ -226,7 +234,7 @@
             );
         }
 
-        function SearchBar({ onSearch }) {
+        function SearchBar({ onSearch, inputRef }) {
             const [inputTerm, setInputTerm] = useState("");
 
             const handleSearchClick = () => {
@@ -242,9 +250,10 @@
             return (
                 <div className="input-group mb-3">
                     <input
+                        ref={inputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search by title..."
+                        placeholder="Search by title (Ctrl + F to focus)..."
                         value={inputTerm}
                         onChange={(e) => setInputTerm(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -270,19 +279,30 @@
             };
 
             const handleSubmit = (e) => {
-                e.preventDefault();
+                if (e) e.preventDefault();
                 if (!title || !query) return;
                 onAddQuery({ title, query });
                 setTitle("");
                 setQuery("");
             };
 
+            const handleKeyDown = (e) => {
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    handleSubmit();
+                }
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    handleFormat();
+                }
+            };
+
             return (
-                <div className="card shadow-sm mb-4 border-0">
+                <div className="card shadow-sm mb-4 border-0" onKeyDown={handleKeyDown}>
                     <div className="card-header bg-info text-white d-flex justify-content-between align-items-center rounded-top">
                         <h5 className="card-title mb-0 fw-bold"><i className="bi bi-plus-circle-fill me-2"></i>New Query</h5>
                         <button type="button" onClick={handleFormat} className="btn btn-sm btn-outline-light rounded-pill px-3">
-                            <i className="bi bi-magic me-1"></i> Format SQL
+                            <i className="bi bi-magic me-1"></i> Format (Ctrl+Enter)
                         </button>
                     </div>
                     <div className="card-body bg-white rounded-bottom">
@@ -308,7 +328,7 @@
                                 ></textarea>
                             </div>
                             <button type="submit" className="btn btn-primary w-100 fw-bold py-2 shadow-sm rounded-pill">
-                                <i className="bi bi-save2 me-2"></i> Save to Library
+                                <i className="bi bi-save2 me-2"></i> Save Query (Ctrl+S)
                             </button>
                         </form>
                     </div>
@@ -380,14 +400,19 @@
                 setIsTitleEditing(!isTitleEditing);
             };
 
-            const handleSave = () => {
-                onUpdateQuery(query.id, { title: editedTitle, query: editedQuery });
-                setIsTitleEditing(false);
-                setIsQueryEditing(false);
+            const handleKeyDown = (e) => {
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    if (isDirty) handleSave();
+                }
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    handleFormat();
+                }
             };
 
             return (
-                <div className="card border-info shadow-sm mb-3">
+                <div className="card border-info shadow-sm mb-3" onKeyDown={handleKeyDown}>
                     <div className="card-body">
                         <div className="d-flex justify-content-between align-items-start">
                              <div className="flex-grow-1">
@@ -608,12 +633,69 @@
             const [searchTerm, setSearchTerm] = useState("");
             const [error, setError] = useState("");
             const [showHistory, setShowHistory] = useState(false); // State to toggle between main queries and history
+            const searchInputRef = useRef(null);
+            const importInputRef = useRef(null);
 
             const getAuthHeader = () => ({
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             });
 
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    // Ctrl + F: Focus search
+                    if (e.ctrlKey && e.key === 'f') {
+                        e.preventDefault();
+                        if (searchInputRef.current) searchInputRef.current.focus();
+                    }
+                    // Ctrl + I: Trigger Import
+                    if (e.ctrlKey && e.key === 'i') {
+                        e.preventDefault();
+                        if (importInputRef.current) importInputRef.current.click();
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, []);
+
+            const handleExport = () => {
+                if (queries.length === 0) {
+                    alert("Nothing to export!");
+                    return;
+                }
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(queries, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `smart_queries_backup_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            };
+
+            const handleImport = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const importedQueries = JSON.parse(event.target.result);
+                        if (!Array.isArray(importedQueries)) throw new Error("Invalid file format.");
+
+                        if (confirm(`Do you want to import ${importedQueries.length} queries?`)) {
+                            for (const q of importedQueries) {
+                                await handleAddQuery({ title: q.title, query: q.query_text || q.query });
+                            }
+                            alert("Import successful!");
+                        }
+                    } catch (err) {
+                        alert("Error importing: " + err.message);
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = ''; // Reset input
+            };
+            // ... (rest of the component stays the same)
             useEffect(() => {
                 // Fetch queries only if not showing history
                 if (!showHistory) {
@@ -632,13 +714,13 @@
                     setQueries([]); // Clear queries if history is shown to avoid displaying both
                 }
             }, [token, showHistory]); // Re-fetch when token or showHistory changes
-
+            
             const addQueryToHistoryAPI = async (queryData) => {
                 try {
                     const response = await fetch(`${API_URL}/history`, {
                         method: 'POST',
                         headers: getAuthHeader(),
-                        body: JSON.stringify({ title: queryData.title, query: queryData.query }),
+                        body: JSON.stringify({ title: queryData.title, query: queryData.query_text || queryData.query }),
                     });
                     if (!response.ok) {
                         console.error('Failed to add search result to history.');
@@ -671,9 +753,11 @@
                     });
                     if (!response.ok) throw new Error('Could not add query.');
                     const savedQuery = await response.json();
-                    setQueries([...queries, savedQuery]);
+                    setQueries(prev => [...prev, savedQuery]);
+                    return savedQuery;
                 } catch (err) {
                     setError(err.message);
+                    throw err;
                 }
             };
 
@@ -731,7 +815,21 @@
 
             return (
                 <div className="main-app-container">
-                    <TitleBar onLogout={onLogout} onShowHistory={handleShowHistory} theme={theme} onToggleTheme={onToggleTheme} />
+                    <TitleBar 
+                        onLogout={onLogout} 
+                        onShowHistory={handleShowHistory} 
+                        theme={theme} 
+                        onToggleTheme={onToggleTheme} 
+                        onExport={handleExport}
+                        onImportClick={() => importInputRef.current.click()}
+                    />
+                    <input 
+                        type="file" 
+                        ref={importInputRef} 
+                        style={{ display: 'none' }} 
+                        accept=".json" 
+                        onChange={handleImport} 
+                    />
                     <div className="container">
                         {error && <div className="alert alert-danger">{error}</div>}
                         {showHistory ? (
@@ -740,7 +838,7 @@
                             <>
                                 <AddQueryForm onAddQuery={handleAddQuery} />
                                 <hr />
-                                <SearchBar onSearch={handleSearch} />
+                                <SearchBar onSearch={handleSearch} inputRef={searchInputRef} />
                                 <QueryList
                                     queries={filteredQueries}
                                     onDeleteQuery={handleDeleteQuery}
