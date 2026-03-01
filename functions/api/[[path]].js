@@ -152,7 +152,10 @@ export async function onRequest(context) {
         } catch (e) {
           errorMessage = errText;
         }
-        return new Response(`AI Error: ${errorMessage}`, { status: aiResponse.status, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: errorMessage }), { 
+          status: aiResponse.status, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
       const data = await aiResponse.json();
