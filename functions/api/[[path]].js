@@ -120,9 +120,9 @@ export async function onRequest(context) {
       const aiAction = path.split('/').pop();
       const { text, query } = await request.json();
       
-      const apiKey = env.GEMINI_API_KEY ? env.GEMINI_API_KEY.trim() : null;
+      const apiKey = env.GEMINI_API_KEY;
       if (!apiKey) {
-        return new Response(JSON.stringify({ error: 'AI Assistant is not configured (API Key missing).' }), { 
+        return new Response(JSON.stringify({ error: 'Backend Error: env.GEMINI_API_KEY is undefined. Please check Cloudflare environment variables.' }), { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
@@ -142,7 +142,8 @@ export async function onRequest(context) {
 
       for (const model of models) {
         try {
-          const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+          const aiResponse = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -152,21 +153,22 @@ export async function onRequest(context) {
 
           if (aiResponse.ok) {
             const data = await aiResponse.json();
-            let result = data.candidates[0].content.parts[0].text.trim();
-            // Clean up AI code blocks
-            if (result.startsWith('```sql')) result = result.replace(/^```sql\n?/, '').replace(/\n?```$/, '');
-            if (result.startsWith('```')) result = result.replace(/^```\n?/, '').replace(/\n?```$/, '');
-            return new Response(JSON.stringify({ result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-          } else {
-            const errData = await aiResponse.text();
-            lastError = `${model}: ${errData}`;
-          }
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+              let result = data.candidates[0].content.parts[0].text.trim();
+              if (result.startsWith('```sql')) result = result.replace(/^```sql\n?/, '').replace(/\n?```$/, '');
+              if (result.startsWith('```')) result = result.replace(/^```\n?/, '').replace(/\n?```$/, '');
+              return new Response(JSON.stringify({ result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+          } 
+          
+          const errData = await aiResponse.text();
+          lastError = `Model ${model} failed: ${aiResponse.status} - ${errData}`;
         } catch (e) {
-          lastError = `${model}: ${e.message}`;
+          lastError = `Fetch to ${model} failed: ${e.message}`;
         }
       }
 
-      return new Response(JSON.stringify({ error: `AI Error (All models failed): ${lastError}` }), { 
+      return new Response(JSON.stringify({ error: `AI Service Error. Details: ${lastError}` }), { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
