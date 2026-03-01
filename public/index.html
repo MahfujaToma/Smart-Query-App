@@ -212,10 +212,13 @@
                         <span className="navbar-brand mb-0 h1 mx-auto text-info"><i className="bi bi-search"></i> Smart Query App</span>
                         <div className="d-flex align-items-center">
                             <div className="btn-group me-2">
-                                <button onClick={onExport} className="btn btn-sm btn-outline-light" title="Export Backup (JSON)">
-                                    <i className="bi bi-download"></i>
+                                <button onClick={() => onExport('json')} className="btn btn-sm btn-outline-light" title="Export Backup (JSON)">
+                                    JSON
                                 </button>
-                                <button onClick={onImportClick} className="btn btn-sm btn-outline-light" title="Import Backup (JSON)">
+                                <button onClick={() => onExport('txt')} className="btn btn-sm btn-outline-light" title="Export as Text Document (.txt)">
+                                    TXT
+                                </button>
+                                <button onClick={onImportClick} className="btn btn-sm btn-outline-light" title="Import Backup (JSON or TXT)">
                                     <i className="bi bi-upload"></i>
                                 </button>
                             </div>
@@ -658,15 +661,27 @@
                 return () => window.removeEventListener('keydown', handleKeyDown);
             }, []);
 
-            const handleExport = () => {
+            const handleExport = (format = 'json') => {
                 if (queries.length === 0) {
                     alert("Nothing to export!");
                     return;
                 }
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(queries, null, 2));
+
+                let content, mimeType, extension;
+                if (format === 'json') {
+                    content = JSON.stringify(queries, null, 2);
+                    mimeType = "application/json";
+                    extension = "json";
+                } else {
+                    content = queries.map(q => `--- TITLE: ${q.title} ---\n${q.query_text || q.query}\n`).join('\n');
+                    mimeType = "text/plain";
+                    extension = "txt";
+                }
+
+                const dataStr = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
                 const downloadAnchorNode = document.createElement('a');
                 downloadAnchorNode.setAttribute("href", dataStr);
-                downloadAnchorNode.setAttribute("download", `smart_queries_backup_${new Date().toISOString().slice(0,10)}.json`);
+                downloadAnchorNode.setAttribute("download", `smart_queries_backup_${new Date().toISOString().slice(0,10)}.${extension}`);
                 document.body.appendChild(downloadAnchorNode);
                 downloadAnchorNode.click();
                 downloadAnchorNode.remove();
@@ -679,8 +694,28 @@
                 const reader = new FileReader();
                 reader.onload = async (event) => {
                     try {
-                        const importedQueries = JSON.parse(event.target.result);
-                        if (!Array.isArray(importedQueries)) throw new Error("Invalid file format.");
+                        let importedQueries = [];
+                        const content = event.target.result;
+
+                        if (file.name.endsWith('.json')) {
+                            importedQueries = JSON.parse(content);
+                        } else if (file.name.endsWith('.txt')) {
+                            // Regex to find: --- TITLE: [Title] --- followed by the query
+                            const regex = /--- TITLE: (.*?) ---\n([\s\S]*?)(?=\n--- TITLE:|$)/g;
+                            let match;
+                            while ((match = regex.exec(content)) !== null) {
+                                importedQueries.push({
+                                    title: match[1].trim(),
+                                    query: match[2].trim()
+                                });
+                            }
+                        } else {
+                            throw new Error("Unsupported file format. Please use .json or .txt");
+                        }
+
+                        if (!Array.isArray(importedQueries) || importedQueries.length === 0) {
+                            throw new Error("No queries found in the file.");
+                        }
 
                         if (confirm(`Do you want to import ${importedQueries.length} queries?`)) {
                             for (const q of importedQueries) {
@@ -827,7 +862,7 @@
                         type="file" 
                         ref={importInputRef} 
                         style={{ display: 'none' }} 
-                        accept=".json" 
+                        accept=".json,.txt" 
                         onChange={handleImport} 
                     />
                     <div className="container">
