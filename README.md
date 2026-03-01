@@ -42,7 +42,7 @@ The application is now serverless. Any changes pushed to the `main` branch of th
     *   **Delete All History:** Introduced a "Delete All History" button in the top-right corner of the history view.
 *   **Query Timestamp Display:** Each saved query prominently displays its last updated time and date.
 
-## Technical Stack (AI Enhanced)
+## Technical Stack (AI Assistant Active)
 
 *   **Frontend:** HTML, CSS, JavaScript (React v18 via CDN, Babel for JSX)
 *   **Backend:** Cloudflare Pages Functions (Serverless Node.js)
