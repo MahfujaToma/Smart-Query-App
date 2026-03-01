@@ -28,36 +28,71 @@ export async function onRequest(context) {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Shared Query: ${query.title}</title>
             <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet">
             <style>
-                body { background-color: #f8f9fa; padding: 2rem; }
-                .container { max-width: 800px; }
-                .query-card {
-                    word-wrap: break-word;
-                    white-space: pre-wrap;
-                    background-color: #e9ecef;
-                    border-left: 5px solid #0dcaf0;
-                    padding: 1rem;
-                    border-radius: 0.25rem;
+                :root { --bg: #f8f9fa; --card: #ffffff; --text: #212529; }
+                @media (prefers-color-scheme: dark) {
+                    :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; }
+                    .card { background-color: var(--card); color: var(--text); border-color: #333; }
+                    .card-header, .card-footer { background-color: rgba(255,255,255,0.05); border-color: #333; }
+                    .text-muted { color: #aaa !important; }
                 }
+                body { background-color: var(--bg); color: var(--text); padding: 2rem 1rem; font-family: system-ui, -apple-system, sans-serif; transition: background 0.3s; }
+                .container { max-width: 900px; }
+                .query-header { margin-bottom: 2rem; text-align: center; }
+                pre[class*="language-"] { border-radius: 0.5rem; margin: 0; max-height: 600px; }
+                .btn-copy { transition: all 0.2s; }
+                .footer-brand { opacity: 0.7; font-size: 0.9rem; margin-top: 3rem; }
+                .badge-sql { background: #0dcaf0; color: #000; font-weight: bold; font-size: 0.7rem; }
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="card shadow-sm">
-                    <div class="card-header">
-                        <h1 class="card-title h3">${query.title}</h1>
+                <div class="query-header">
+                    <h2 class="display-6 fw-bold text-info"><i class="bi bi-share-fill me-2"></i>Shared SQL Query</h2>
+                    <p class="text-muted">A code snippet shared via Smart Query App</p>
+                </div>
+
+                <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
+                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge badge-sql mb-1">SQL</span>
+                            <h1 class="card-title h4 mb-0">${query.title}</h1>
+                        </div>
+                        <button id="copyBtn" class="btn btn-outline-info btn-sm rounded-pill px-3 btn-copy">
+                            <i class="bi bi-clipboard me-1"></i> Copy Code
+                        </button>
                     </div>
-                    <div class="card-body">
-                        <pre class="query-card"><code>${query.query_text}</code></pre>
+                    <div class="card-body p-0">
+                        <pre class="language-sql"><code class="language-sql">${query.query_text}</code></pre>
                     </div>
-                    <div class="card-footer text-muted">
-                        Shared at ${new Date(query.created_at).toLocaleString()}
+                    <div class="card-footer py-3 d-flex justify-content-between align-items-center">
+                        <small class="text-muted"><i class="bi bi-calendar3 me-1"></i> Shared on ${new Date(query.created_at).toLocaleDateString()}</small>
+                        <a href="/" class="btn btn-sm btn-primary rounded-pill">Create Yours</a>
                     </div>
                 </div>
-                 <div class="mt-3 text-center">
-                    <a href="/" class="btn btn-primary">Create your own queries with Smart Query App</a>
+
+                <div class="text-center footer-brand">
+                    <p>Powered by <strong>Smart Query App</strong> — Your personal SQL library.</p>
                 </div>
             </div>
+
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+            <script>
+                document.getElementById('copyBtn').addEventListener('click', function() {
+                    const code = \`${query.query_text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+                    navigator.clipboard.writeText(code).then(() => {
+                        this.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+                        this.classList.replace('btn-outline-info', 'btn-success');
+                        setTimeout(() => {
+                            this.innerHTML = '<i class="bi bi-clipboard"></i> Copy Code';
+                            this.classList.replace('btn-success', 'btn-outline-info');
+                        }, 2000);
+                    });
+                });
+            </script>
         </body>
         </html>
     `;
