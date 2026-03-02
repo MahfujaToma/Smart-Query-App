@@ -268,7 +268,75 @@
             );
         }
         
-        function AddQueryForm({ onAddQuery }) {
+        function AiAssistant({ onGenerated, getAuthHeader }) {
+            const [prompt, setPrompt] = useState("");
+            const [loading, setLoading] = useState(false);
+            const [isVisible, setIsVisible] = useState(false);
+
+            const handleGenerate = async () => {
+                if (!prompt) return;
+                setLoading(true);
+                try {
+                    const response = await fetch(`${API_URL}/ai/generate`, {
+                        method: 'POST',
+                        headers: getAuthHeader(),
+                        body: JSON.stringify({ prompt })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || "Generation failed.");
+                    onGenerated(data.sql);
+                    setIsVisible(false);
+                    setPrompt("");
+                } catch (err) {
+                    alert("AI Error: " + err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="mb-3">
+                    <button 
+                        type="button" 
+                        className="btn btn-sm btn-outline-info w-100 rounded-pill mb-2"
+                        onClick={() => setIsVisible(!isVisible)}
+                    >
+                        <i className="bi bi-robot me-2"></i> {isVisible ? 'Close AI Assistant' : 'Ask AI to write SQL'}
+                    </button>
+                    
+                    {isVisible && (
+                        <div className="card border-info bg-light bg-opacity-10 shadow-sm animate-fade-in">
+                            <div className="card-body">
+                                <label className="form-label small fw-bold text-info">What would you like to query?</label>
+                                <div className="input-group">
+                                    <input 
+                                        type="text" 
+                                        className="form-control border-info" 
+                                        placeholder="e.g., Show me users created this month"
+                                        value={prompt}
+                                        onChange={(e) => setPrompt(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleGenerate())}
+                                    />
+                                    <button 
+                                        className="btn btn-info text-white" 
+                                        type="button" 
+                                        onClick={handleGenerate}
+                                        disabled={loading}
+                                    >
+                                        {loading ? <span className="spinner-border spinner-border-sm"></span> : <i className="bi bi-stars"></i>}
+                                    </button>
+                                </div>
+                                <div className="form-text text-muted smaller mt-1">
+                                    <i className="bi bi-info-circle me-1"></i> AI knows your table names: users, queries, history.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function AddQueryForm({ onAddQuery, getAuthHeader }) {
             const [title, setTitle] = useState("");
             const [query, setQuery] = useState("");
 
@@ -309,6 +377,7 @@
                         </button>
                     </div>
                     <div className="card-body bg-white rounded-bottom">
+                        <AiAssistant onGenerated={(sql) => setQuery(sql)} getAuthHeader={getAuthHeader} />
                         <form onSubmit={handleSubmit}>
                             <div className="mb-3">
                                 <label className="form-label small fw-bold text-info">Title</label>

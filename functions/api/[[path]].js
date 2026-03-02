@@ -134,6 +134,58 @@ export async function onRequest(context) {
       });
     }
 
+    // --- AI GENERATION ---
+    if (path === 'ai/generate' && method === 'POST') {
+      const { prompt } = await request.json();
+      const GEMINI_API_KEY = env.GEMINI_API_KEY;
+
+      if (!GEMINI_API_KEY) {
+        return new Response(JSON.stringify({ error: 'Gemini API key not configured in environment.' }), { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
+
+      const systemPrompt = `
+        You are a PostgreSQL expert for the 'Smart Query App'. 
+        The database schema is:
+        - users (id UUID, username TEXT, created_at TIMESTAMP)
+        - queries (id UUID, user_id UUID, title TEXT, query_text TEXT, created_at TIMESTAMP, updated_at TIMESTAMP)
+        - shared_queries (id UUID, share_id TEXT, title TEXT, query_text TEXT, original_user_id UUID, created_at TIMESTAMP)
+        - query_history (id UUID, user_id UUID, title TEXT, query_text TEXT, created_at TIMESTAMP)
+
+        Generate a valid PostgreSQL query based on the user's natural language request. 
+        IMPORTANT: Return ONLY the raw SQL code. Do NOT include markdown formatting, explanations, or any other text.
+      `;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `${systemPrompt}\n\nUser Request: ${prompt}` }]
+          }]
+        })
+      });
+
+      const aiData = await response.json();
+      
+      if (!response.ok) {
+        return new Response(JSON.stringify({ error: aiData.error?.message || 'AI Generation failed.' }), { 
+          status: response.status, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
+
+      const generatedSql = aiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+      // Strip any accidental markdown
+      const cleanSql = generatedSql.replace(/^```sql\n?|```$/g, '').trim();
+
+      return new Response(JSON.stringify({ sql: cleanSql }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   } catch (err) {
     return new Response(err.message, { status: 500, headers: corsHeaders });
