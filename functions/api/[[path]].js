@@ -171,7 +171,9 @@ export async function onRequest(context) {
       const aiData = await response.json();
       
       if (!response.ok) {
-        return new Response(JSON.stringify({ error: aiData.error?.message || 'AI Generation failed.' }), { 
+        console.error('Gemini API Error:', aiData);
+        const errorMessage = aiData.error?.message || JSON.stringify(aiData) || 'AI Generation failed.';
+        return new Response(JSON.stringify({ error: `Gemini API Error (${response.status}): ${errorMessage}` }), { 
           status: response.status, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
