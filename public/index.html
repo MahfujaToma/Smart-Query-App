@@ -1006,7 +1006,7 @@
                             <QueryHistory token={token} getAuthHeader={getAuthHeader} onBack={handleHideHistory} />
                         ) : (
                             <>
-                                <AddQueryForm onAddQuery={handleAddQuery} />
+                                <AddQueryForm onAddQuery={handleAddQuery} getAuthHeader={getAuthHeader} />
                                 <hr />
                                 <SearchBar onSearch={handleSearch} inputRef={searchInputRef} />
                                 <QueryList
