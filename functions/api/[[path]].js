@@ -101,8 +101,20 @@ export async function onRequest(context) {
       return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    if (path === 'history/all' && method === 'DELETE') {
-        await supabase.from('query_history').delete().eq('user_id', user.id);
+    if (path === 'history' && method === 'POST') {
+        const { title, query } = await request.json();
+        const { data, error } = await supabase.from('query_history').insert([{ user_id: user.id, title, query_text: query }]).select().single();
+        if (error) return new Response(error.message, { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify(data), { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (path.startsWith('history/') && method === 'DELETE') {
+        const id = path.split('/').pop();
+        if (id === 'all') {
+            await supabase.from('query_history').delete().eq('user_id', user.id);
+        } else {
+            await supabase.from('query_history').delete().eq('id', id).eq('user_id', user.id);
+        }
         return new Response(null, { status: 204, headers: corsHeaders });
     }
 
