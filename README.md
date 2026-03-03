@@ -26,6 +26,7 @@ The application is now serverless. Any changes pushed to the `main` branch of th
     *   `Ctrl + I`: Trigger backup import.
 *   **Empty States:** Modern, visual illustrations for empty libraries and history logs.
 *   **Search Improvements:** Enhanced search functionality that looks inside both query titles and the SQL content itself.
+*   **Query History UI (Restored):** Fixed field mapping issues (createdAt -> created_at) and ensured consistent syntax highlighting in the history view.
 
 ### Data & Sharing
 *   **Flexible Export/Import:** Backup and restore your entire library as structured **JSON** or human-readable **TXT** documents.
@@ -34,13 +35,14 @@ The application is now serverless. Any changes pushed to the `main` branch of th
 ### User Management
 *   **User Authentication UI:** Dedicated Login and Registration pages with autofill prevention and clear feedback.
 *   **Query Management:** Full CRUD (Create, Read, Update, Delete) capabilities with inline editing.
-*   **Query History:** Automated chronological logging of all query activities with individual and bulk delete options.
+*   **Enhanced Query History:** Automated chronological logging of all query activities with restored individual and bulk delete options.
 
 ### Backend (Serverless)
 *   **Edge Functions:** Backend logic powered by **Cloudflare Pages Functions**.
 *   **Data Persistence:** Robust PostgreSQL storage via **Supabase**.
 *   **Live SQL RPC:** A custom `exec_sql` PostgreSQL function allowing safe, dynamic query execution from the frontend.
 *   **Auth:** Secure session management using `jose` (JWT) and `bcryptjs`.
+*   **History API Expansion:** Implemented missing `POST /history` and granular `DELETE /history/:id` endpoints for better activity tracking.
 
 ## Technical Stack
 
