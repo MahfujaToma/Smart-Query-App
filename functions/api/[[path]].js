@@ -158,48 +158,48 @@ export async function onRequest(context) {
         console.error("Schema fetch failed:", e);
       }
 
-      // 3. Call Google Gemini 1.5 Flash API (v1 stable)
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-      
-      let aiData;
-      try {
-        const aiResponse = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are a PostgreSQL expert. Given the following database schema (if available):
-                ${formattedSchema}
-                
-                Generate a valid SQL query for the following request: "${prompt}".
-                Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
+      // 3. Call Google Gemini with Multi-Model Fallback
+      const models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest'];
+      let lastError = null;
+
+      for (const modelName of models) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+          
+          const aiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: `You are a PostgreSQL expert. Given the following database schema (if available):
+                  ${formattedSchema}
+                  
+                  Generate a valid SQL query for the following request: "${prompt}".
+                  Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
+                }]
               }]
-            }]
-          })
-        });
+            })
+          });
 
-        const contentType = aiResponse.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-           const text = await aiResponse.text();
-           return new Response(JSON.stringify({ error: `API returned non-JSON response: ${text.substring(0, 100)}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            const generatedSql = aiData.candidates[0].content.parts[0].text.trim();
+            return new Response(JSON.stringify({ sql: generatedSql }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          } else {
+            const errData = await aiResponse.json();
+            lastError = errData.error?.message || `HTTP ${aiResponse.status}`;
+            console.warn(`Model ${modelName} failed: ${lastError}`);
+            continue; // Try next model
+          }
+        } catch (err) {
+          lastError = err.message;
+          continue; // Try next model
         }
-
-        aiData = await aiResponse.json();
-        
-        if (!aiResponse.ok) {
-          return new Response(JSON.stringify({ error: aiData.error?.message || 'AI Generation failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-      } catch (err) {
-        return new Response(JSON.stringify({ error: `Fetch error: ${err.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      if (!aiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return new Response(JSON.stringify({ error: 'AI returned an empty or invalid result.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const generatedSql = aiData.candidates[0].content.parts[0].text.trim();
-      return new Response(JSON.stringify({ sql: generatedSql }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      // If we get here, all models failed
+      return new Response(JSON.stringify({ error: `AI Generation failed on all models. Last error: ${lastError}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- LIVE EXECUTION ---
