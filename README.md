@@ -39,10 +39,18 @@ The application is now serverless. Any changes pushed to the `main` branch of th
 
 ### Backend (Serverless)
 *   **Edge Functions:** Backend logic powered by **Cloudflare Pages Functions**.
+*   **AI SQL Generation:** Upgraded to **Google Gemini 2.5 Flash (v1beta)** for faster, more intelligent SQL generation with explicit reasoning capabilities.
 *   **Data Persistence:** Robust PostgreSQL storage via **Supabase**.
 *   **Live SQL RPC:** A custom `exec_sql` PostgreSQL function allowing safe, dynamic query execution from the frontend.
 *   **Auth:** Secure session management using `jose` (JWT) and `bcryptjs`.
 *   **History API Expansion:** Implemented missing `POST /history` and granular `DELETE /history/:id` endpoints for better activity tracking.
+
+## Next Steps (Planned for March 5, 2026)
+
+*   **Production Verification:** Confirm that the Gemini 2.5 Flash integration is functioning correctly on the live Cloudflare Pages environment.
+*   **Advanced AI Features:** Explore implementing "Query Explanation" to help users understand complex generated SQL.
+*   **Enhanced Error Handling:** Improve the UI feedback when the AI model is at capacity or the API key is restricted.
+*   **UI Polishing:** Refine the loading states during AI generation for a smoother user experience.
 
 ## Technical Stack
 
