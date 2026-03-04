@@ -297,7 +297,9 @@
                     setQuery(data.sql);
                     if (!title) setTitle(aiPrompt.substring(0, 50));
                 } catch (err) {
-                    alert("AI Error: " + err.message);
+                    const errorMsg = err.message || 'Unknown error';
+                    const detailMsg = err.details ? `\nDetails: ${err.details}` : '';
+                    alert(`AI Error: ${errorMsg}${detailMsg}`);
                 } finally {
                     setIsAiGenerating(false);
                 }

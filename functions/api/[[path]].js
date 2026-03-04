@@ -148,7 +148,10 @@ export async function onRequest(context) {
       });
 
       if (schemaError) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch database schema for AI.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ 
+          error: 'Failed to fetch database schema for AI.', 
+          details: schemaError.message 
+        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       // 2. Format Schema for Prompt
