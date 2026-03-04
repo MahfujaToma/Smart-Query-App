@@ -137,20 +137,14 @@ export async function onRequest(context) {
       }
 
       // 1. Fetch Schema Awareness Data
-      // We fetch table names and their column names/types from the public schema
       const { data: schemaInfo, error: schemaError } = await supabase.rpc('exec_sql', { 
-        sql_query: `
-          SELECT table_name, column_name, data_type 
-          FROM information_schema.columns 
-          WHERE table_schema = 'public'
-          ORDER BY table_name, ordinal_position;
-        ` 
+        sql_query: "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'" 
       });
 
       if (schemaError) {
         return new Response(JSON.stringify({ 
           error: 'Failed to fetch database schema for AI.', 
-          details: schemaError.message 
+          details: `Supabase Error: ${schemaError.message}. Make sure your 'exec_sql' function exists and has 'SECURITY DEFINER' set.` 
         }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 

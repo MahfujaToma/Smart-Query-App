@@ -293,7 +293,11 @@
                         body: JSON.stringify({ prompt: aiPrompt })
                     });
                     const data = await response.json();
-                    if (!response.ok) throw new Error(data.error || 'AI Generation failed');
+                    if (!response.ok) {
+                        const error = new Error(data.error || 'AI Generation failed');
+                        error.details = data.details;
+                        throw error;
+                    }
                     setQuery(data.sql);
                     if (!title) setTitle(aiPrompt.substring(0, 50));
                 } catch (err) {
