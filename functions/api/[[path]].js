@@ -133,7 +133,10 @@ export async function onRequest(context) {
       const GEMINI_API_KEY = env.GEMINI_API_KEY;
 
       if (!GEMINI_API_KEY) {
-        return new Response(JSON.stringify({ error: 'Gemini API Key is not configured in environment variables.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ 
+          error: 'Gemini API Key is MISSING in Cloudflare Environment Variables.',
+          details: 'Please add GEMINI_API_KEY to your Cloudflare Pages Settings -> Environment Variables and REDEPLOY.' 
+        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       // 1. Try to Fetch Schema (Optional)
@@ -158,48 +161,41 @@ export async function onRequest(context) {
         console.error("Schema fetch failed:", e);
       }
 
-      // 3. Call Google Gemini with Multi-Model Fallback
-      const models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest'];
-      let lastError = null;
-
-      for (const modelName of models) {
-        try {
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-          
-          const aiResponse = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `You are a PostgreSQL expert. Given the following database schema (if available):
-                  ${formattedSchema}
-                  
-                  Generate a valid SQL query for the following request: "${prompt}".
-                  Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
-                }]
+      // 2. Call Google Gemini 1.5 Flash (v1 Stable)
+      const modelName = 'gemini-1.5-flash';
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+      
+      try {
+        const aiResponse = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `You are a PostgreSQL expert. Given the following database schema (if available):
+                ${formattedSchema}
+                
+                Generate a valid SQL query for the following request: "${prompt}".
+                Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
               }]
-            })
-          });
+            }]
+          })
+        });
 
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            const generatedSql = aiData.candidates[0].content.parts[0].text.trim();
-            return new Response(JSON.stringify({ sql: generatedSql }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-          } else {
-            const errData = await aiResponse.json();
-            lastError = errData.error?.message || `HTTP ${aiResponse.status}`;
-            console.warn(`Model ${modelName} failed: ${lastError}`);
-            continue; // Try next model
-          }
-        } catch (err) {
-          lastError = err.message;
-          continue; // Try next model
+        const aiData = await aiResponse.json();
+        
+        if (!aiResponse.ok) {
+          return new Response(JSON.stringify({ 
+            error: `Gemini API Error (${aiResponse.status}): ${aiData.error?.message || 'Unknown error'}`,
+            details: `Model: ${modelName}. If you see "limit: 0", your API key is restricted by Google. Try creating a NEW API key in a different Google Cloud project.`
+          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
-      }
 
-      // If we get here, all models failed
-      return new Response(JSON.stringify({ error: `AI Generation failed on all models. Last error: ${lastError}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const generatedSql = aiData.candidates[0].content.parts[0].text.trim();
+        return new Response(JSON.stringify({ sql: generatedSql }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: `Fetch error: ${err.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     // --- LIVE EXECUTION ---
