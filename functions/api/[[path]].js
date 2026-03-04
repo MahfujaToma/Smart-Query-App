@@ -136,31 +136,30 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ error: 'Gemini API Key is not configured in environment variables.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // 1. Fetch Schema Awareness Data
-      const { data: schemaInfo, error: schemaError } = await supabase.rpc('exec_sql', { 
-        sql_query: "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'" 
-      });
+      // 1. Try to Fetch Schema (Optional)
+      let formattedSchema = "Schema information unavailable.";
+      try {
+        const { data: schemaInfo, error: schemaError } = await supabase.rpc('exec_sql', { 
+          sql_query: "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'" 
+        });
 
-      if (schemaError) {
-        return new Response(JSON.stringify({ 
-          error: 'Failed to fetch database schema for AI.', 
-          details: `Supabase Error: ${schemaError.message}. Make sure your 'exec_sql' function exists and has 'SECURITY DEFINER' set.` 
-        }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        if (!schemaError && schemaInfo) {
+          const schemaString = schemaInfo.reduce((acc, curr) => {
+            if (!acc[curr.table_name]) acc[curr.table_name] = [];
+            acc[curr.table_name].push(`${curr.column_name} (${curr.data_type})`);
+            return acc;
+          }, {});
+
+          formattedSchema = Object.entries(schemaString)
+            .map(([table, cols]) => `Table "${table}" has columns: ${cols.join(', ')}`)
+            .join('\n');
+        }
+      } catch (e) {
+        console.error("Schema fetch failed:", e);
       }
 
-      // 2. Format Schema for Prompt
-      const schemaString = schemaInfo.reduce((acc, curr) => {
-        if (!acc[curr.table_name]) acc[curr.table_name] = [];
-        acc[curr.table_name].push(`${curr.column_name} (${curr.data_type})`);
-        return acc;
-      }, {});
-
-      const formattedSchema = Object.entries(schemaString)
-        .map(([table, cols]) => `Table "${table}" has columns: ${cols.join(', ')}`)
-        .join('\n');
-
-      // 3. Call Google Gemini API
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      // 2. Call Google Gemini 2.0 Flash API
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
       
       const aiResponse = await fetch(geminiUrl, {
         method: 'POST',
@@ -168,7 +167,7 @@ export async function onRequest(context) {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are a PostgreSQL expert. Given the following database schema:
+              text: `You are a PostgreSQL expert. Given the following database schema (if available):
               ${formattedSchema}
               
               Generate a valid SQL query for the following request: "${prompt}".
