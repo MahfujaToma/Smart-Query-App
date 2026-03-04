@@ -161,8 +161,8 @@ export async function onRequest(context) {
         console.error("Schema fetch failed:", e);
       }
 
-      // 2. Call Google Gemini 1.5 Flash Latest (v1beta)
-      const modelName = 'gemini-1.5-flash-latest';
+      // 2. Call Google Gemini 2.5 Flash (v1beta)
+      const modelName = 'gemini-2.5-flash';
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
       
       try {
