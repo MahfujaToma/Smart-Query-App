@@ -127,6 +127,70 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ shareLink: `${url.origin}/share/${shared.share_id}` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // --- AI SQL GENERATION ---
+    if (path === 'ai/generate' && method === 'POST') {
+      const { prompt } = await request.json();
+      const GEMINI_API_KEY = env.GEMINI_API_KEY;
+
+      if (!GEMINI_API_KEY) {
+        return new Response(JSON.stringify({ error: 'Gemini API Key is not configured in environment variables.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 1. Fetch Schema Awareness Data
+      // We fetch table names and their column names/types from the public schema
+      const { data: schemaInfo, error: schemaError } = await supabase.rpc('exec_sql', { 
+        sql_query: `
+          SELECT table_name, column_name, data_type 
+          FROM information_schema.columns 
+          WHERE table_schema = 'public'
+          ORDER BY table_name, ordinal_position;
+        ` 
+      });
+
+      if (schemaError) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch database schema for AI.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 2. Format Schema for Prompt
+      const schemaString = schemaInfo.reduce((acc, curr) => {
+        if (!acc[curr.table_name]) acc[curr.table_name] = [];
+        acc[curr.table_name].push(`${curr.column_name} (${curr.data_type})`);
+        return acc;
+      }, {});
+
+      const formattedSchema = Object.entries(schemaString)
+        .map(([table, cols]) => `Table "${table}" has columns: ${cols.join(', ')}`)
+        .join('\n');
+
+      // 3. Call Google Gemini API
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      
+      const aiResponse = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are a PostgreSQL expert. Given the following database schema:
+              ${formattedSchema}
+              
+              Generate a valid SQL query for the following request: "${prompt}".
+              Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
+            }]
+          }]
+        })
+      });
+
+      const aiData = await aiResponse.json();
+      
+      if (!aiResponse.ok) {
+        return new Response(JSON.stringify({ error: aiData.error?.message || 'AI Generation failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const generatedSql = aiData.candidates[0].content.parts[0].text.trim();
+      return new Response(JSON.stringify({ sql: generatedSql }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // --- LIVE EXECUTION ---
     if (path === 'execute' && method === 'POST') {
       const { query: sql } = await request.json();
