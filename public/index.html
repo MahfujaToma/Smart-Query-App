@@ -301,9 +301,9 @@
                     setQuery(data.sql);
                     if (!title) setTitle(aiPrompt.substring(0, 50));
                 } catch (err) {
-                    const errorMsg = err.message || 'Unknown error';
-                    const detailMsg = err.details ? `\nDetails: ${err.details}` : '';
-                    alert(`AI Error: ${errorMsg}${detailMsg}`);
+                    console.error("AI Assistant Error:", err);
+                    const shortMsg = err.message ? err.message.substring(0, 100) : 'Unknown error';
+                    alert(`AI Error: ${shortMsg}...\n\n(Full error logged to Console. Press F12 to view)`);
                 } finally {
                     setIsAiGenerating(false);
                 }

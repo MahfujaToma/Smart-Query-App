@@ -158,29 +158,44 @@ export async function onRequest(context) {
         console.error("Schema fetch failed:", e);
       }
 
-      // 2. Call Google Gemini 2.0 Flash API
+      // 3. Call Google Gemini 2.0 Flash API
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
       
-      const aiResponse = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are a PostgreSQL expert. Given the following database schema (if available):
-              ${formattedSchema}
-              
-              Generate a valid SQL query for the following request: "${prompt}".
-              Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
+      let aiData;
+      try {
+        const aiResponse = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `You are a PostgreSQL expert. Given the following database schema (if available):
+                ${formattedSchema}
+                
+                Generate a valid SQL query for the following request: "${prompt}".
+                Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
+              }]
             }]
-          }]
-        })
-      });
+          })
+        });
 
-      const aiData = await aiResponse.json();
-      
-      if (!aiResponse.ok) {
-        return new Response(JSON.stringify({ error: aiData.error?.message || 'AI Generation failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const contentType = aiResponse.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+           const text = await aiResponse.text();
+           return new Response(JSON.stringify({ error: `API returned non-JSON response: ${text.substring(0, 100)}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        aiData = await aiResponse.json();
+        
+        if (!aiResponse.ok) {
+          return new Response(JSON.stringify({ error: aiData.error?.message || 'AI Generation failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      } catch (err) {
+        return new Response(JSON.stringify({ error: `Fetch error: ${err.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (!aiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return new Response(JSON.stringify({ error: 'AI returned an empty or invalid result.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       const generatedSql = aiData.candidates[0].content.parts[0].text.trim();
