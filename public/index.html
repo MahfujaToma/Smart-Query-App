@@ -273,6 +273,7 @@
             const [query, setQuery] = useState("");
             const [aiPrompt, setAiPrompt] = useState("");
             const [isAiGenerating, setIsAiGenerating] = useState(false);
+            const [aiMode, setAiMode] = useState("local"); // "local" or "global"
 
             const handleFormat = () => {
                 try {
@@ -290,7 +291,7 @@
                     const response = await fetch(`${API_URL}/ai/generate`, {
                         method: 'POST',
                         headers: getAuthHeader(),
-                        body: JSON.stringify({ prompt: aiPrompt })
+                        body: JSON.stringify({ prompt: aiPrompt, mode: aiMode })
                     });
                     const data = await response.json();
                     if (!response.ok) {
@@ -339,12 +340,21 @@
                     </div>
                     <div className="card-body bg-white rounded-bottom">
                         <div className="mb-4 p-3 bg-light rounded border-start border-4 border-info">
-                            <label className="form-label small fw-bold text-info"><i className="bi bi-robot me-1"></i> AI Assistant (Generate from text)</label>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                                <label className="form-label small fw-bold text-info mb-0"><i className="bi bi-robot me-1"></i> AI Assistant (Generate from text)</label>
+                                <div className="btn-group btn-group-sm" role="group">
+                                    <input type="radio" className="btn-check" name="aiMode" id="modeLocal" checked={aiMode === 'local'} onChange={() => setAiMode('local')} />
+                                    <label className="btn btn-outline-info" htmlFor="modeLocal">Local DB</label>
+                                    
+                                    <input type="radio" className="btn-check" name="aiMode" id="modeGlobal" checked={aiMode === 'global'} onChange={() => setAiMode('global')} />
+                                    <label className="btn btn-outline-info" htmlFor="modeGlobal">Global</label>
+                                </div>
+                            </div>
                             <div className="input-group">
                                 <input
                                     type="text"
                                     className="form-control border-0 shadow-none"
-                                    placeholder="e.g., Get all users who signed up today"
+                                    placeholder={aiMode === 'local' ? "e.g., Get all users who signed up today" : "e.g., Write a complex MySQL join for orders and products"}
                                     value={aiPrompt}
                                     onChange={(e) => setAiPrompt(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleAiGenerate()}
@@ -357,6 +367,11 @@
                                 >
                                     {isAiGenerating ? <span className="spinner-border spinner-border-sm"></span> : 'Generate SQL'}
                                 </button>
+                            </div>
+                            <div className="mt-1">
+                                <small className="text-muted" style={{fontSize: '0.75rem'}}>
+                                    {aiMode === 'local' ? '✨ Uses your Supabase tables' : '🌎 General purpose SQL assistant'}
+                                </small>
                             </div>
                         </div>
 

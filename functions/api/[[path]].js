@@ -129,7 +129,7 @@ export async function onRequest(context) {
 
     // --- AI SQL GENERATION ---
     if (path === 'ai/generate' && method === 'POST') {
-      const { prompt } = await request.json();
+      const { prompt, mode } = await request.json();
       const GEMINI_API_KEY = env.GEMINI_API_KEY;
 
       if (!GEMINI_API_KEY) {
@@ -139,26 +139,42 @@ export async function onRequest(context) {
         }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // 1. Try to Fetch Schema (Optional)
-      let formattedSchema = "Schema information unavailable.";
-      try {
-        const { data: schemaInfo, error: schemaError } = await supabase.rpc('exec_sql', { 
-          sql_query: "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'" 
-        });
+      let systemPrompt = "";
 
-        if (!schemaError && schemaInfo) {
-          const schemaString = schemaInfo.reduce((acc, curr) => {
-            if (!acc[curr.table_name]) acc[curr.table_name] = [];
-            acc[curr.table_name].push(`${curr.column_name} (${curr.data_type})`);
-            return acc;
-          }, {});
+      if (mode === 'global') {
+        systemPrompt = `You are a Global SQL Expert. Generate a valid SQL query for the following request: "${prompt}".
+        Provide a standard, optimized SQL solution (e.g., PostgreSQL, MySQL, or generic SQL depending on the request).
+        Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`;
+      } else {
+        // Default: "local" mode
+        // 1. Try to Fetch Schema
+        let formattedSchema = "Schema information unavailable.";
+        try {
+          const { data: schemaInfo, error: schemaError } = await supabase.rpc('exec_sql', { 
+            sql_query: "SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'" 
+          });
 
-          formattedSchema = Object.entries(schemaString)
-            .map(([table, cols]) => `Table "${table}" has columns: ${cols.join(', ')}`)
-            .join('\n');
+          if (!schemaError && schemaInfo) {
+            const schemaString = schemaInfo.reduce((acc, curr) => {
+              if (!acc[curr.table_name]) acc[curr.table_name] = [];
+              acc[curr.table_name].push(`${curr.column_name} (${curr.data_type})`);
+              return acc;
+            }, {});
+
+            formattedSchema = Object.entries(schemaString)
+              .map(([table, cols]) => `Table "${table}" has columns: ${cols.join(', ')}`)
+              .join('\n');
+          }
+        } catch (e) {
+          console.error("Schema fetch failed:", e);
         }
-      } catch (e) {
-        console.error("Schema fetch failed:", e);
+
+        systemPrompt = `You are a PostgreSQL expert. Given the following database schema:
+        ${formattedSchema}
+        
+        Generate a valid SQL query for the following request: "${prompt}".
+        The query MUST be compatible with the tables and columns listed above.
+        Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`;
       }
 
       // 2. Call Google Gemini 2.5 Flash (v1beta)
@@ -172,11 +188,7 @@ export async function onRequest(context) {
           body: JSON.stringify({
             contents: [{
               parts: [{
-                text: `You are a PostgreSQL expert. Given the following database schema (if available):
-                ${formattedSchema}
-                
-                Generate a valid SQL query for the following request: "${prompt}".
-                Return ONLY the raw SQL code, no markdown, no explanations, no triple backticks.`
+                text: systemPrompt
               }]
             }]
           })
