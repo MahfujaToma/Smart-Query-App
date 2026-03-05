@@ -338,8 +338,8 @@
                             <i className="bi bi-magic me-1"></i> Format (Ctrl+Enter)
                         </button>
                     </div>
-                    <div className="card-body bg-white rounded-bottom">
-                        <div className="mb-4 p-3 bg-light rounded border-start border-4 border-info">
+                    <div className="card-body rounded-bottom">
+                        <div className="mb-4 p-3 rounded border-start border-4 border-info" style={{backgroundColor: 'rgba(13, 202, 240, 0.05)'}}>
                             <div className="d-flex justify-content-between align-items-center mb-2">
                                 <label className="form-label small fw-bold text-info mb-0"><i className="bi bi-robot me-1"></i> AI Assistant (Generate from text)</label>
                                 <div className="btn-group btn-group-sm" role="group">
@@ -380,7 +380,7 @@
                                 <label className="form-label small fw-bold text-info">Title</label>
                                 <input
                                     type="text"
-                                    className="form-control bg-light border-0 shadow-none"
+                                    className="form-control border-0 shadow-none"
                                     placeholder="e.g., Get All Recent Users"
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
@@ -389,7 +389,7 @@
                             <div className="mb-3">
                                 <label className="form-label small fw-bold text-info">SQL Code</label>
                                 <textarea
-                                    className="form-control bg-light border-0 font-monospace shadow-none"
+                                    className="form-control border-0 font-monospace shadow-none"
                                     rows="4"
                                     placeholder="SELECT * FROM users..."
                                     value={query}
@@ -735,7 +735,7 @@
                         <div className="history-timeline">
                             {history.map(entry => (
                                 <div key={entry.id} className="card mb-4 shadow-sm border-0 rounded-3">
-                                    <div className="card-header bg-light d-flex justify-content-between align-items-center border-0 py-3">
+                                    <div className="card-header d-flex justify-content-between align-items-center border-0 py-3">
                                         <h6 className="mb-0 fw-bold text-info">{entry.title || 'Untitled Query'}</h6>
                                         <small className="text-muted"><i className="bi bi-calendar3 me-1"></i> {new Date(entry.created_at).toLocaleString()}</small>
                                     </div>
